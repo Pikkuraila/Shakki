@@ -1,0 +1,27 @@
+fileFormatVersion: 2
+guid: 79afcf44f926cab4b87da4871595755e
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - TileLightPrefab: {fileID: 8356425651452168791, guid: a9ea721efa3221c4793b64a3a700d1b2, type: 3}
+  - TileDarkPrefab: {fileID: 4389019308709194380, guid: 1085f7c97857ce34aaf3eecc984d7386, type: 3}
+  - HighlightPrefab: {fileID: 8356425651452168791, guid: 8de043c666c463844ae64e595a9c1da4, type: 3}
+  - PiecePrefab: {fileID: 3211104496081311905, guid: 8bdda47d3d6be27409d14b254627da7e, type: 3}
+  - WhiteRookDef: {fileID: 11400000, guid: dd7fd56ba7f8af54eb0615531c307a5b, type: 2}
+  - WhiteKingDef: {fileID: 11400000, guid: 27afd10a8d88b9043bbcd64371855b59, type: 2}
+  - WhiteBishopDef: {fileID: 11400000, guid: 7f42dbda1b7f6114a818ca07ffa0b3bd, type: 2}
+  - WhiteKnightDef: {fileID: 11400000, guid: baf8c9509d5301340bae91a44e29beaa, type: 2}
+  - WhitePawnDef: {fileID: 11400000, guid: 478ba0d95a07a6240b1cc36070bd2ddb, type: 2}
+  - WhiteQueenDef: {fileID: 11400000, guid: 8789affb42026024abb4a10f33f5d064, type: 2}
+  - BlackBishopDef: {fileID: 11400000, guid: 7f42dbda1b7f6114a818ca07ffa0b3bd, type: 2}
+  - BlackKnightDef: {fileID: 11400000, guid: baf8c9509d5301340bae91a44e29beaa, type: 2}
+  - BlackPawnDef: {fileID: 11400000, guid: 478ba0d95a07a6240b1cc36070bd2ddb, type: 2}
+  - BlackRookDef: {fileID: 11400000, guid: dd7fd56ba7f8af54eb0615531c307a5b, type: 2}
+  - BlackKingDef: {fileID: 11400000, guid: 27afd10a8d88b9043bbcd64371855b59, type: 2}
+  - BlackQueenDef: {fileID: 11400000, guid: 8789affb42026024abb4a10f33f5d064, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
