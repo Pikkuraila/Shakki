@@ -13,9 +13,32 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] Vihollisilla voisi olla “AI-persoonat” (KnightLover, BishopHater jne.).
 - [ ] Jokaisella bossilla voisi olla erikoisavausteksti (“My pawns bleed for me.”). 
 - [ ] Bossit käyttäis samaa dialogisysteemiä ku Greco. Puhuis myös samalla tavalla.
-
+- [ ] Jos tulee käytettäviä itemeitä kuten freeze ja jump spell ni ne käytetään aina ennen siirtoa.
+- [ ] Saa syödä omia nappuloita.
+- [ ] Sotilaat lähtökohtasesti jakaa kuninkaan abilityt. synergiat solttujen ja upseerien välillä fokukseks?
+- [ ] Spessu kauppa jossa voi lihamyllätä nappuloitaan yhteen jotta niistä tulee uusia.
 
 ---
+
+## 🔹 Ideat - nappuloita
+
+- [ ] Leijona - Kolme mihi tahansa suuntaa ja sen viereiset ruudut.
+- [X] Jokeri - Liikkuu kuin viimeisein tyyppi tai kuningas.
+- [ ] Unicornio - Ensin liikkuu kuin heppa ja sit ampuu ku lähetti. Vahva piissi.
+- [X] Empress - Heppalähetti.
+- [ ] Griffin - liikkuu nurkittain jatkaa siitä 8 suuntaan ku torni. Eli liiku or
+- [X] Amazon - kuningatar + torni + lähetti. Todella vahva.
+
+## 🔹 Ideat - Sotilas
+- [ ] Voi syödä toisiaan jotta ne upgradettaa.
+- [ ] Voi liikkua johonkin extra suuntaan.
+- [ ] Voi liikkua extra kerran.
+
+
+
+## 🔹 Ideat - kuninkaita
+
+
 
 ## 🔹 Pohdintaa
 
