@@ -2,7 +2,7 @@
 
 namespace Shakki.Core
 {
-    public sealed class Move : IEquatable<Move>
+    public readonly struct Move : IEquatable<Move>
     {
         public Coord From { get; }
         public Coord To { get; }
@@ -18,16 +18,14 @@ namespace Shakki.Core
         public override string ToString()
             => $"{From} -> {To}" + (AsTypeName != null ? $" as {AsTypeName}" : "");
 
-        // IEquatable + override
+        // IEquatable<Move>
         public bool Equals(Move other)
-        {
-            if (other is null) return false;
-            return From.Equals(other.From)
-                && To.Equals(other.To)
-                && string.Equals(AsTypeName, other.AsTypeName, StringComparison.Ordinal);
-        }
+            => From.Equals(other.From)
+            && To.Equals(other.To)
+            && string.Equals(AsTypeName, other.AsTypeName, StringComparison.Ordinal);
 
-        public override bool Equals(object obj) => obj is Move m && Equals(m);
+        public override bool Equals(object obj)
+            => obj is Move m && Equals(m);
 
         public override int GetHashCode()
         {
@@ -41,9 +39,7 @@ namespace Shakki.Core
             }
         }
 
-        public static bool operator ==(Move a, Move b)
-            => a is null ? b is null : a.Equals(b);
-
-        public static bool operator !=(Move a, Move b) => !(a == b);
+        public static bool operator ==(Move a, Move b) => a.Equals(b);
+        public static bool operator !=(Move a, Move b) => !a.Equals(b);
     }
 }

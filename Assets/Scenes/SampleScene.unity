@@ -374,6 +374,11 @@ MonoBehaviour:
   TileDarkPrefab: {fileID: 4389019308709194380, guid: 1085f7c97857ce34aaf3eecc984d7386, type: 3}
   HighlightPrefab: {fileID: 8356425651452168791, guid: 8de043c666c463844ae64e595a9c1da4, type: 3}
   PiecePrefab: {fileID: 3211104496081311905, guid: 8bdda47d3d6be27409d14b254627da7e, type: 3}
+  template: {fileID: 0}
+  width: 8
+  height: 8
+  tileSize: 1
+  cameraPaddingTiles: 0.5
   WhiteRookDef: {fileID: 11400000, guid: dd7fd56ba7f8af54eb0615531c307a5b, type: 2}
   WhiteKingDef: {fileID: 11400000, guid: 27afd10a8d88b9043bbcd64371855b59, type: 2}
   WhiteBishopDef: {fileID: 11400000, guid: 7f42dbda1b7f6114a818ca07ffa0b3bd, type: 2}

@@ -15,7 +15,8 @@ Tavoite: pitää kehitystyö jäsenneltynä ja helposti päivitettävänä Gitin
 
 | Versio | Tavoite | Status |
 |---------|----------|--------|
-| **v0.1 – Core Loop** | Pelaajan ja AI:n perussiirrot, vuoronvaihto, voitto kuninkaan syönnistä. | ✅ Valmis |
+| **v0.101 – Core Loop** | Pelaajan ja AI:n perussiirrot, vuoronvaihto  | ✅ Valmis |
+| **v0.103 - voitto kuninkaan syönnistä, lautojen generointi | 🔄 Työn alla |
 | **v0.2 – Kauppa & Meta** | ShopScene, PlayerData, coin-järjestelmä. | 🔄 Työn alla |
 | **v0.3 – Kampanja / Macropeli** | 3×20 makrolauta, boss-vuorot, kaupat ja eventit. | 🕓 Suunnitteilla |
 | **v0.4 – Fog of War & Modifiers** | IBattleModifier-järjestelmä, visibility-palvelu. | ⏳ Suunnitteilla |
@@ -27,6 +28,7 @@ Tavoite: pitää kehitystyö jäsenneltynä ja helposti päivitettävänä Gitin
 
 ## 🔹 Lyhyen aikavälin tehtävät
 
+- [X] Tehdään pelilaudasta modulaarinen ja helposti generoitava.
 - [ ] Toteuta `GameState.CheckGameEnd()` ja `OnGameEnded`.
 - [ ] Luo `ShopScene` ja UI.
 - [ ] Toteuta `PlayerData` (coins, ownedPieces, upgrades).

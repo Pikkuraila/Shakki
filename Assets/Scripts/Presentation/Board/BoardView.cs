@@ -46,6 +46,21 @@ public class BoardView : MonoBehaviour
     public GameObject HighlightPrefab;
     public GameObject PiecePrefab; // oletus, ellei overridea
 
+    [Header("Board Source")]
+    public BoardTemplateSO template;       // jätä tyhjäksi → käytetään width/height
+    public int width = 8;
+    public int height = 8;
+    public int? seedOverride;              // jos käytät random tageja
+
+    [Header("View")]
+    public float tileSize = 1f;
+    public float cameraPaddingTiles = 0.5f; // extra “tyhjää” reunoille
+
+
+    // Välimuisti, jotta voidaan siivota/päivittää laattoja
+    readonly Dictionary<(int x, int y), GameObject> _tiles = new();
+
+
     [Header("Start Pieces")]
 
     public PieceDefSO WhiteRookDef;
@@ -86,6 +101,7 @@ public class BoardView : MonoBehaviour
     public PieceDefSO BlackJokerDef;
 
 
+
     [Header("Def Registry")]
     public List<PieceDefSO> AllPieceDefs = new(); // vedä tänne kaikki käyttämäsi PieceDefSO:t
 
@@ -105,6 +121,7 @@ public class BoardView : MonoBehaviour
     [SerializeField] private AiMode aiMode = AiMode.Random;
 
     private IAiPlayer ai;
+
 
 
 
@@ -134,33 +151,90 @@ public class BoardView : MonoBehaviour
     }
 
 
+
     void Start()
     {
+        // 1) Rakenna GameState templaatista tai fallback 8x8
+        if (template != null)
         {
-            _state = new GameState();
-            _state.OnTurnChanged += HandleTurnChanged;
+            var allowed = template.BuildAllowedMask();
+            var tags    = template.BuildTags(allowed, seedOverride);
+            var geom    = new GridGeometry(template.width, template.height, allowed);
 
-            SetupStartPosition();   // ← jätä vain tämä kerta
-
-            BuildBoardTiles();
-            SyncAllPiecesFromState();
-
-            _state.OnCaptured += HandleCapture;
-
-            Camera.main.transform.position = new Vector3(3.5f, 3.5f, -10f);
-            Camera.main.orthographic = true;
-            Camera.main.orthographicSize = 5f;
-
-            switch (aiMode)
-            {
-                case AiMode.Random: ai = new RandomAi(); break;
-                case AiMode.Greedy: ai = new GreedyAi(); break;
-                default: ai = null; break; // None -> kaksinpeli
-            }
-            DumpStateSnapshot("start");
+            _state = new GameState(geom, tags);
+        }
+        else
+        {
+            var geom = new GridGeometry(width, height);
+            _state   = new GameState(geom);
         }
 
+        // 2) Eventit (tilaa ennen synckiä)
+        _state.OnTurnChanged += HandleTurnChanged;
+        _state.OnCaptured    += HandleCapture;
+
+        // 3) Aseta lähtöpelin nappulat vain sallittuihin ruutuihin
+        SetupStartPosition();
+
+        // 4) Rakenna laattavisut vain sallittuihin koordinaatteihin
+        BuildBoardTiles();
+
+        // 5) Synkkaa nappulat näkymään
+        SyncAllPiecesFromState();
+
+        // 6) Kamera keskelle ja skaalaa oikein aspectin mukaan
+        CenterAndFitCamera();
+
+        // 7) AI-mode
+        switch (aiMode)
+        {
+            case AiMode.Random: ai = new RandomAi(); break;
+            case AiMode.Greedy: ai = new GreedyAi(); break;
+            default: ai = null; break; // None -> kaksinpeli
+        }
+
+        DumpStateSnapshot("start");
     }
+
+    void OnDestroy()
+    {
+        if (_state != null)
+        {
+            _state.OnTurnChanged -= HandleTurnChanged;
+            _state.OnCaptured    -= HandleCapture;
+        }
+    }
+
+    void CenterAndFitCamera()
+    {
+        var cam = Camera.main;
+        if (!cam) return;
+
+        // Keskipiste maailman­koordinaateissa
+        float worldW = (_state.Width)  * tileSize;
+        float worldH = (_state.Height) * tileSize;
+        float cx = worldW * 0.5f - tileSize * 0.5f;
+        float cy = worldH * 0.5f - tileSize * 0.5f;
+
+        cam.transform.position = new Vector3(cx, cy, -10f);
+        cam.orthographic = true;
+
+        // Fittaa koko lauta ruutuun aspectin mukaan + padding
+        float pad = cameraPaddingTiles * tileSize;
+        float halfW = worldW * 0.5f + pad;
+        float halfH = worldH * 0.5f + pad;
+
+        float aspect = (float)Screen.width / Screen.height;
+        // orthoSize on “puoli-korkeus”; leveysvaatimus tulee jakamalla aspectilla
+        float needByHeight = halfH;
+        float needByWidth  = halfW / aspect;
+
+        cam.orthographicSize = Mathf.Max(needByHeight, needByWidth);
+    }
+
+    // Varmista että BuildBoardTiles ja SetupStartPosition käyttävät:
+    // foreach (var c in _state.AllCoords()) { ... }
+    // eikä kiinteitä for (y < 8) -silmukoita.
 
     private bool _aiRunning = false;
 
@@ -225,22 +299,33 @@ public class BoardView : MonoBehaviour
 
     void BuildBoardTiles()
     {
-        for (int y = 0; y < GameState.H; y++)
-            for (int x = 0; x < GameState.W; x++)
-            {
-                var isLight = ((x + y) % 2 == 0);
-                var prefab = isLight ? TileLightPrefab : TileDarkPrefab;
-                var go = Instantiate(prefab, new Vector3(x, y, 0f), Quaternion.identity, transform);
+        // 0) Siivoa vanhat
+        foreach (var go in _tiles.Values) if (go) Destroy(go);
+        _tiles.Clear();
 
-                // tärkeä: laatat alle
-                var tileSR = go.GetComponent<SpriteRenderer>();
-                if (tileSR) tileSR.sortingOrder = 0;
+        // 1) Rakenna laatat vain sallituille koordinaateille
+        foreach (var c in _state.AllCoords()) // huom! ei for y<x GameState.H/W
+        {
+            bool isLight = ((c.X + c.Y) & 1) == 0;
+            var prefab = isLight ? TileLightPrefab : TileDarkPrefab;
 
-                var tv = go.GetComponent<TileView>() ?? go.AddComponent<TileView>();
-                var color = isLight ? new Color(0.92f, 0.92f, 0.92f) : new Color(0.6f, 0.63f, 0.65f);
-                tv.Init(x, y, this, color);
-            }
+            var pos = new Vector3(c.X * tileSize, c.Y * tileSize, 0f);
+            var go = Instantiate(prefab, pos, Quaternion.identity, transform);
+            go.name = $"Tile_{c.X}_{c.Y}";
+
+            // 2) Aina alle nappuloiden
+            if (go.TryGetComponent<SpriteRenderer>(out var sr))
+                sr.sortingOrder = 0;
+
+            // 3) TileView init (jos käytössä)
+            var tv = go.GetComponent<TileView>() ?? go.AddComponent<TileView>();
+            var color = isLight ? new Color(0.92f, 0.92f, 0.92f) : new Color(0.6f, 0.63f, 0.65f);
+            tv.Init(c.X, c.Y, this, color);
+
+            _tiles[(c.X, c.Y)] = go;
+        }
     }
+
 
     public void ClearHighlightsPublic()
     {
@@ -566,16 +651,6 @@ public class BoardView : MonoBehaviour
                 var rule = so.Build();
                 if (rule != null) yield return rule;
             }
-        }
-    }
-
-
-    private void OnDestroy()
-    {
-        if (_state != null)
-        {
-            _state.OnCaptured -= HandleCapture;
-            _state.OnTurnChanged -= HandleTurnChanged; // ← lisää tämä
         }
     }
 

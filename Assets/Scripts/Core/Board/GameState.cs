@@ -1,211 +1,166 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Shakki.Core
 {
     public sealed class GameState
     {
-        public const int W = 8;
-        public const int H = 8;
-
-        private readonly Piece?[,] _board = new Piece?[W, H];
+        public BoardState Board { get; }
         public string CurrentPlayer { get; private set; } = "white";
-        public Move LastMove { get; private set; }
+
+        public Move? LastMove { get; private set; }
+        public string LastMoveEffectiveTypeName { get; private set; }
         public List<Move> MoveHistory { get; } = new();
-        public event System.Action<Coord, Piece> OnCaptured;
-        public event System.Action<string> OnTurnChanged; // uusi pelaaja: "white"/"black"
 
-        public bool InBounds(Coord c) => c.X >= 0 && c.Y >= 0 && c.X < W && c.Y < H;
+        public event Action<Coord, Piece>? OnCaptured;
+        public event Action<string>? OnTurnChanged;
 
-        public Piece? Get(Coord c) => _board[c.X, c.Y];
-        public void Set(Coord c, Piece? p) => _board[c.X, c.Y] = p;
+        public int Width => Board.Geometry.Width;
+        public int Height => Board.Geometry.Height;
 
-        public IEnumerable<Coord> AllCoords()
+        private static int _lastWidth = 8;
+        private static int _lastHeight = 8;
+
+        [System.Obsolete("Use instance property Width")]
+        public static int W => _lastWidth;
+
+        [System.Obsolete("Use instance property Height")]
+        public static int H => _lastHeight;
+
+        public GameState(GridGeometry geometry, TileTags tags = null)
         {
-            for (int y = 0; y < H; y++)
-                for (int x = 0; x < W; x++)
-                    yield return new Coord(x, y);
+            Board = new BoardState(geometry, tags);
+            _lastWidth = geometry.Width;
+            _lastHeight = geometry.Height;
         }
 
-
+             // Delegoinnit
+        public bool InBounds(Coord c) => Board.Contains(c);
+        public Piece? Get(Coord c) => Board.Get(c);
+        public void Set(Coord c, Piece? p) => Board.Set(c, p);
+        public IEnumerable<Coord> AllCoords() => Board.AllCoords();
 
         public bool ApplyMove(Move m, IRulesResolver rules)
         {
-
-            Debug.Log($"[GS] ApplyMove? cur={CurrentPlayer}, from={m.From.X},{m.From.Y} to={m.To.X},{m.To.Y} as={m.AsTypeName ?? "∅"}");
+            if (m.From.X == m.To.X && m.From.Y == m.To.Y) return false;
 
             var piece = Get(m.From);
-            if (piece == null) { Debug.Log("[GS] FAIL: no piece @from"); return false; }
-            if (piece.Owner != CurrentPlayer) { Debug.Log($"[GS] FAIL: piece.Owner={piece.Owner} != CurrentPlayer={CurrentPlayer}"); return false; }
+            if (piece == null || piece.Owner != CurrentPlayer) return false;
 
-            // Laillisuustarkistus käyttäen resolveria (JokerRule näkyy)
+            // Legal check
             bool legal = false;
             foreach (var lm in GenerateLegalMoves(m.From, rules))
+            {
                 if (lm.To.X == m.To.X && lm.To.Y == m.To.Y) { legal = true; break; }
+            }
             if (!legal) return false;
 
-            // --- NORMAALI KAAPPAUS (pidä oma olemassa oleva logiikkasi) ---
+            // Capture (kohderuudussa vihollinen)
             var target = Get(m.To);
             if (target != null && target.Owner != piece.Owner)
-            {
                 OnCaptured?.Invoke(m.To, target);
-            }
 
-            // --- EN PASSANT -POISTO ---
-            if (piece.TypeName == "Pawn"
-                && m.From.X != m.To.X          // diagonaali
-                && Get(m.To) == null           // kohderuutu tyhjä -> EP-ehdokas
-                && LastMove != null)
+            // En passant (ruudukolle)
+            if (piece.TypeName == "Pawn" && target == null && LastMove.HasValue)
             {
-                var last = LastMove;
-                var moved = Get(last.To);      // << tämä ON se kaapattava sotilas
-                int dy = last.To.Y - last.From.Y;
+                // EP = diagonaalisiirto tyhjään ruutuun, edellinen oli vastapuolen tuplahyppy viereisestä tiedostosta
+                int dx = m.To.X - m.From.X, dy = m.To.Y - m.From.Y;
+                bool diagonal = Math.Abs(dx) == 1 && Math.Abs(dy) == 1;
 
-                bool wasDouble = (moved != null && moved.TypeName == "Pawn"
-                                     && moved.Owner != piece.Owner && System.Math.Abs(dy) == 2);
-                bool adjacentFile = System.Math.Abs(last.To.X - m.From.X) == 1;
-                bool sameRank = (last.To.Y == m.From.Y);
-
-                if (wasDouble && adjacentFile && sameRank)
+                var last = LastMove.Value;
+                var movedPawn = Get(last.To);
+                if (diagonal && movedPawn != null && movedPawn.TypeName == "Pawn" && movedPawn.Owner != piece.Owner)
                 {
-                    // Poista ohitettu sotilas ja ilmoita kaappaus
-                    Set(last.To, null);
-                    OnCaptured?.Invoke(last.To, moved);
+                    int dyy = last.To.Y - last.From.Y;
+                    bool wasDouble = Math.Abs(dyy) == 2;
+                    bool adjacentFile = Math.Abs(last.To.X - m.From.X) == 1;
+                    bool sameRankAtStart = (last.To.Y == m.From.Y);
+                    if (wasDouble && adjacentFile && sameRankAtStart)
+                    {
+                        Set(last.To, null);
+                        OnCaptured?.Invoke(last.To, movedPawn);
+                    }
                 }
-                System.Console.WriteLine($"[GS] Apply {m.From}->{m.To}, AsType={m.AsTypeName ?? "∅"}");
             }
 
-            // --- TORNITUS: jos kuningas liikkuu 2 ruutua vaakasuunnassa, liikutetaan torni ---
-            if (piece.TypeName == "King" && System.Math.Abs(m.To.X - m.From.X) == 2 && m.To.Y == m.From.Y)
+            // Tornitus (kuningas liikkuu 2 vaakaruutua)
+            if (piece.TypeName == "King" && m.To.Y == m.From.Y && Math.Abs(m.To.X - m.From.X) == 2)
             {
-                int dir = (m.To.X > m.From.X) ? +1 : -1; // +1 = O-O, -1 = O-O-O
+                int dir = (m.To.X > m.From.X) ? +1 : -1;
                 int y = m.From.Y;
 
-                // Etsi tornin lähtöruutu siltä puolelta
-                int rookFromX = -1;
-                if (dir == +1)
+                // Skannaa kuninkaan suuntaan kunnes löytyy eka nappula; jos se on oma torni, siirrä
+                int x = m.From.X;
+                Coord? rookFrom = null;
+                while (true)
                 {
-                    // oikea torni
-                    for (int x = m.From.X + 1; x < GameState.W; x++)
-                    {
-                        var t = Get(new Coord(x, y));
-                        if (t == null) continue;
-                        if (t.TypeName == "Rook" && t.Owner == piece.Owner) rookFromX = x;
-                        break;
-                    }
-                }
-                else
-                {
-                    // vasen torni
-                    for (int x = m.From.X - 1; x >= 0; x--)
-                    {
-                        var t = Get(new Coord(x, y));
-                        if (t == null) continue;
-                        if (t.TypeName == "Rook" && t.Owner == piece.Owner) rookFromX = x;
-                        break;
-                    }
+                    x += dir;
+                    var c = new Coord(x, y);
+                    if (!InBounds(c)) break;
+                    var t = Get(c);
+                    if (t == null) continue;
+                    if (t.TypeName == "Rook" && t.Owner == piece.Owner) rookFrom = c;
+                    break;
                 }
 
-                if (rookFromX >= 0)
+                if (rookFrom.HasValue)
                 {
-                    var rookFrom = new Coord(rookFromX, y);
-                    var rook = Get(rookFrom);
+                    var rook = Get(rookFrom.Value);
                     if (rook != null && rook.TypeName == "Rook" && rook.Owner == piece.Owner)
                     {
-                        var rookTo = new Coord(m.To.X - dir, y); // kuninkaan viereen "sisäpuolelle"
+                        var rookTo = new Coord(m.To.X - dir, y);
                         Set(rookTo, rook);
-                        Set(rookFrom, null);
+                        Set(rookFrom.Value, null);
                         rook.HasMoved = true;
-
-                        // Kerro näkymälle, että tämä torni “siirtyi” (valinnainen event)
-                        // OnCaptured ei ole tähän sopiva; jos haluat, lisää OnRookCastled(rookFrom, rookTo).
                     }
                 }
             }
 
-
-            // ... siirto on todettu lailliseksi, mahdolliset kaappaukset hoidettu,
-            // siirrä nappula laudalla:
+            // Siirrä nappula
             Set(m.To, piece);
             Set(m.From, null);
-
-            // Asettaa nappulan liikkuneeksi
             piece.HasMoved = true;
 
-            // Päivitä viime siirto + tehokas tyyppi
+            // Päivitykset
             LastMove = m;
-            var effective = string.IsNullOrEmpty(m.AsTypeName) ? piece.TypeName : m.AsTypeName;
-            LastMoveEffectiveTypeName = effective;
+            LastMoveEffectiveTypeName = string.IsNullOrEmpty(m.AsTypeName) ? piece.TypeName : m.AsTypeName;
+            MoveHistory.Add(m);
 
-            Debug.Log($"[GS] OK: moved {piece.Owner} {piece.TypeName} {m.From.X},{m.From.Y}->{m.To.X},{m.To.Y}. Next={(CurrentPlayer == "white" ? "black" : "white")}");
-
-            // VUORONVAIHTO
             CurrentPlayer = (CurrentPlayer == "white") ? "black" : "white";
-            Debug.Log($"[GS] {piece.Owner} {m.From}->{m.To} ok. Turn -> {CurrentPlayer}");
             OnTurnChanged?.Invoke(CurrentPlayer);
-
-            // (debug, halutessasi)
-            Debug.Log($"[GS] Turn -> {CurrentPlayer} (effective={effective})");
-
             return true;
-        }
-
-        public string LastMoveEffectiveTypeName { get; private set; }
-
-        public void Apply(Move m)
-        {
-            // ... sinun normaali siirron soveltaminen
-
-            var mover = Get(m.To); // siirron jälkeen siirtäjä on m.To:ssa
-            var effective = string.IsNullOrEmpty(m.AsTypeName) ? mover?.TypeName : m.AsTypeName;
-            LastMoveEffectiveTypeName = effective;
-        }
-
-        public struct CaptureInfo
-        {
-            public bool DidCapture;
-            public Coord At;
-            public Piece Piece;
         }
 
         public List<Move> AllMoves(string color, IRulesResolver rules = null)
         {
             var moves = new List<Move>();
-
             foreach (var c in AllCoords())
             {
                 var p = Get(c);
                 if (p == null || p.Owner != color) continue;
 
-                var ctx = new RuleContext(this, c, rules);
-                foreach (var rule in p.Rules)
-                    foreach (var m in rule.Generate(ctx))
-                        moves.Add(m);
+                if (rules != null)
+                {
+                    var ctx = new RuleContext(this, c, rules);
+                    foreach (var rule in rules.GetRulesFor(p.TypeName))
+                        foreach (var m in rule.Generate(ctx))
+                            moves.Add(m);
+                }
+                else
+                {
+                    var ctx = new RuleContext(this, c);
+                    foreach (var rule in p.Rules)
+                        foreach (var m in rule.Generate(ctx))
+                            moves.Add(m);
+                }
             }
-
             return moves;
         }
 
         public bool IsSquareAttacked(Coord sq, string byColor)
         {
-            // 1) Sotilaiden hyökkäykset käsin (koska niiden liikesäännöt eivät tuota diagonaalia ellei nappulaa ole)
-            int pawnDir = (byColor == "white") ? +1 : -1;
-            var p1 = new Coord(sq.X - 1, sq.Y - pawnDir); // huom: sq on kohde; hyökkääjä olisi -dir suunnassa
-            var p2 = new Coord(sq.X + 1, sq.Y - pawnDir);
-
-            if (InBounds(p1))
-            {
-                var p = Get(p1);
-                if (p != null && p.Owner == byColor && p.TypeName == "Pawn") return true;
-            }
-            if (InBounds(p2))
-            {
-                var p = Get(p2);
-                if (p != null && p.Owner == byColor && p.TypeName == "Pawn") return true;
-            }
-
-            // 2) Muut nappulat: tarkista, voiko ne siirtyä tähän ruutuun CAPTURENA
-            //    Trikki: laita ruutuun hetkeksi "uhri", jotta kaappausreitit syntyvät
+            // Dummy-uhri – tuottaa myös sotilaiden kaappausdiagonaalit oikein
             var saved = Get(sq);
             var dummyVictim = new Piece(OwnerOpposite(byColor), "Dummy", System.Array.Empty<IMoveRule>());
             Set(sq, dummyVictim);
@@ -224,10 +179,7 @@ namespace Shakki.Core
                                 return true;
                 }
             }
-            finally
-            {
-                Set(sq, saved); // palauta asema
-            }
+            finally { Set(sq, saved); }
 
             return false;
         }
@@ -236,43 +188,22 @@ namespace Shakki.Core
 
         public IEnumerable<Move> GenerateLegalMoves(Coord from, IRulesResolver rules)
         {
-            // 1) Resolveripolku (JokerRule mukana)
+            var me = Get(from);
+            if (me == null) yield break;
+
             if (rules != null)
             {
-                var me = Get(from);
-                if (me == null) yield break;
-
                 var ctx = new RuleContext(this, from, rules);
                 foreach (var rule in rules.GetRulesFor(me.TypeName))
-                {
                     foreach (var m in rule.Generate(ctx))
-                    {
-                        // Jos sinulla on erillinen laillisuussuodatus, käytä sitä tässä:
-                        // if (IsLegalMove(m)) yield return m;
                         yield return m;
-                    }
-                }
                 yield break;
             }
 
-            // 2) Legacy-reitti: EI resolveria → käytä vanhaa 1-param. logiikkaasi
-            // Jos sinulla on vielä olemassa se alkuperäinen GenerateLegalMoves(from)-metodin
-            // runko, kopioi sen sisus tähän. Alla on tyypillinen muoto:
-            {
-                var me = Get(from);
-                if (me == null) yield break;
-
-                var ctx = new RuleContext(this, from); // ilman resolveria
-                                                       // HUOM: korvaa 'me.Rules' sillä nimellä, jolla nappulasi säilyttää sääntölistan
-                foreach (var rule in me.Rules)
-                {
-                    foreach (var m in rule.Generate(ctx))
-                    {
-                        // if (IsLegalMove(m)) yield return m;
-                        yield return m;
-                    }
-                }
-            }
+            var ctx2 = new RuleContext(this, from);
+            foreach (var rule in me.Rules)
+                foreach (var m in rule.Generate(ctx2))
+                    yield return m;
         }
     }
 }

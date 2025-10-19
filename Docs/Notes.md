@@ -17,7 +17,13 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] Saa syödä omia nappuloita.
 - [ ] Sotilaat lähtökohtasesti jakaa kuninkaan abilityt. synergiat solttujen ja upseerien välillä fokukseks?
 - [ ] Spessu kauppa jossa voi lihamyllätä nappuloitaan yhteen jotta niistä tulee uusia.
-
+- [ ] alustava value systeemi kaikille nappuloille.
+	Solttu - 1
+	Heppa - 3
+	Lähetti - 4
+	Torni - 5
+	Kuningatar - 9
+	Kuningas - 100
 ---
 
 ## 🔹 Ideat - nappuloita
@@ -25,9 +31,12 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] Leijona - Kolme mihi tahansa suuntaa ja sen viereiset ruudut.
 - [X] Jokeri - Liikkuu kuin viimeisein tyyppi tai kuningas.
 - [ ] Unicornio - Ensin liikkuu kuin heppa ja sit ampuu ku lähetti. Vahva piissi.
-- [X] Empress - Heppalähetti.
 - [ ] Griffin - liikkuu nurkittain jatkaa siitä 8 suuntaan ku torni. Eli liiku or
+
+Yhdistelmänappuja.
+- [X] Empress - heppa + torni.
 - [X] Amazon - kuningatar + torni + lähetti. Todella vahva.
+- [X] Archbishop - heppa + lähetti.
 
 ## 🔹 Ideat - Sotilas
 - [ ] Voi syödä toisiaan jotta ne upgradettaa.
