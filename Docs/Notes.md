@@ -24,6 +24,8 @@ DUMPPAA KAIKKI TÄNNE
 	Torni - 5
 	Kuningatar - 9
 	Kuningas - 100
+
+
 ---
 
 ## 🔹 Ideat - nappuloita
@@ -42,6 +44,7 @@ Yhdistelmänappuja.
 - [ ] Voi syödä toisiaan jotta ne upgradettaa.
 - [ ] Voi liikkua johonkin extra suuntaan.
 - [ ] Voi liikkua extra kerran.
+- [ ] Kopioi takana olevan upseerin liikkumiskyky.
 
 
 
