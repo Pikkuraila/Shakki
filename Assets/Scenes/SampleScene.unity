@@ -340,6 +340,90 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &815260985
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 815260987}
+  - component: {fileID: 815260986}
+  - component: {fileID: 815260988}
+  m_Layer: 0
+  m_Name: Systems
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &815260986
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 815260985}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7cd807c33f322a4e8d2ab041cee231d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  catalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
+--- !u!4 &815260987
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 815260985}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 1.747972, y: 0.5316353, z: 0.041762944}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &815260988
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 815260985}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6373ac1c9bd043649a4c081fb250c0d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  boardView: {fileID: 1711210143}
+  catalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
+  encounterOverride: {fileID: 11400000, guid: dc5bf032f33248e419f49c3b511f3596, type: 2}
+  slotMap: {fileID: 11400000, guid: addf4891963dd274a8def68a8f2d4487, type: 2}
+  template: {fileID: 11400000, guid: 776aef66163a9db42ac574b8ccade39f, type: 2}
+  width: 8
+  height: 8
+  allPieceDefsForRules:
+  - {fileID: 11400000, guid: 85cd5ef668d991043999e6983df9d3f4, type: 2}
+  - {fileID: 11400000, guid: 84ca7c8a65dd2994cbc725f8cb6b667c, type: 2}
+  - {fileID: 11400000, guid: 3d2ddfb07c5134a4fb6b9cd193c86b61, type: 2}
+  - {fileID: 11400000, guid: 7f42dbda1b7f6114a818ca07ffa0b3bd, type: 2}
+  - {fileID: 11400000, guid: 145dbf8cf58644b42bd1020bb6ba58c2, type: 2}
+  - {fileID: 11400000, guid: 40d7ac773a6e5f541810b957506eb345, type: 2}
+  - {fileID: 11400000, guid: 683ba768fd0d511449f207fe49ca236b, type: 2}
+  - {fileID: 11400000, guid: 0d1168925b25aba4f8b6debabaadb206, type: 2}
+  - {fileID: 11400000, guid: a35795a40b2535a48a3897732dc52b81, type: 2}
+  - {fileID: 11400000, guid: 2a452427f3bb82b42a238cb14da578a3, type: 2}
+  - {fileID: 11400000, guid: 27afd10a8d88b9043bbcd64371855b59, type: 2}
+  - {fileID: 11400000, guid: baf8c9509d5301340bae91a44e29beaa, type: 2}
+  - {fileID: 11400000, guid: cb9eba4ddddfb1949832b4d3242a971d, type: 2}
+  - {fileID: 11400000, guid: 8789affb42026024abb4a10f33f5d064, type: 2}
+  - {fileID: 11400000, guid: dd7fd56ba7f8af54eb0615531c307a5b, type: 2}
+  - {fileID: 11400000, guid: b227334994d076849999aaf20e416a9f, type: 2}
+  - {fileID: 11400000, guid: 478ba0d95a07a6240b1cc36070bd2ddb, type: 2}
+  aiMode: 1
 --- !u!1 &1711210142
 GameObject:
   m_ObjectHideFlags: 0
@@ -428,7 +512,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 0d1168925b25aba4f8b6debabaadb206, type: 2}
   - {fileID: 11400000, guid: 3d2ddfb07c5134a4fb6b9cd193c86b61, type: 2}
   - {fileID: 11400000, guid: 2a452427f3bb82b42a238cb14da578a3, type: 2}
-  aiMode: 1
+  aiMode: 2
 --- !u!4 &1711210144
 Transform:
   m_ObjectHideFlags: 0
@@ -601,3 +685,4 @@ SceneRoots:
   - {fileID: 1975001428}
   - {fileID: 1711210144}
   - {fileID: 8931679767569071152}
+  - {fileID: 815260987}

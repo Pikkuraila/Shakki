@@ -35,8 +35,13 @@ public class BoardView : MonoBehaviour
         return (Mathf.RoundToInt(w.x), Mathf.RoundToInt(w.y));
     }
 
-    private static bool InBounds((int x, int y) c)
-    => c.x >= 0 && c.x < GameState.W && c.y >= 0 && c.y < GameState.H;
+    private bool InBounds((int x, int y) c)
+        => _state != null && c.x >= 0 && c.x < _state.Width && c.y >= 0 && c.y < _state.Height;
+
+
+
+
+    public GameState State => _state;
 
     private IRulesResolver _rules;
 
@@ -122,7 +127,31 @@ public class BoardView : MonoBehaviour
 
     private IAiPlayer ai;
 
+    public void Init(GameState state, IRulesResolver rules, AiMode mode)
+    {
+        _state = state;
+        _rules = rules;
+        aiMode = mode;
 
+        // Eventit ennen synckiä
+        _state.OnTurnChanged += HandleTurnChanged;
+        _state.OnCaptured += HandleCapture;
+
+        // Laatta- ja nappulapiirto
+        BuildBoardTiles();
+        SyncAllPiecesFromState();
+        CenterAndFitCamera();
+
+        // AI-mode
+        switch (aiMode)
+        {
+            case AiMode.Random: ai = new RandomAi(); break;
+            case AiMode.Greedy: ai = new GreedyAi(); break;
+            default: ai = null; break;
+        }
+
+        DumpStateSnapshot("init");
+    }
 
 
 
@@ -134,66 +163,6 @@ public class BoardView : MonoBehaviour
             if (def == null || string.IsNullOrEmpty(def.typeName)) continue;
             _defByType[def.typeName] = def;
         }
-
-
-        var map = new Dictionary<string, PieceDefSO>(System.StringComparer.OrdinalIgnoreCase);
-        foreach (var def in AllPieceDefs)
-        {
-            if (def == null || string.IsNullOrWhiteSpace(def.typeName)) continue;
-            map[def.typeName] = def;
-        }
-
-        _rules = new DefRegistryRulesResolver(map);
-
-        // Debugi: listaa rekisteröidyt tyypit
-        UnityEngine.Debug.Log($"[BV] RulesResolver init, types: {string.Join(", ", map.Keys)}");
-
-    }
-
-
-
-    void Start()
-    {
-        // 1) Rakenna GameState templaatista tai fallback 8x8
-        if (template != null)
-        {
-            var allowed = template.BuildAllowedMask();
-            var tags    = template.BuildTags(allowed, seedOverride);
-            var geom    = new GridGeometry(template.width, template.height, allowed);
-
-            _state = new GameState(geom, tags);
-        }
-        else
-        {
-            var geom = new GridGeometry(width, height);
-            _state   = new GameState(geom);
-        }
-
-        // 2) Eventit (tilaa ennen synckiä)
-        _state.OnTurnChanged += HandleTurnChanged;
-        _state.OnCaptured    += HandleCapture;
-
-        // 3) Aseta lähtöpelin nappulat vain sallittuihin ruutuihin
-        SetupStartPosition();
-
-        // 4) Rakenna laattavisut vain sallittuihin koordinaatteihin
-        BuildBoardTiles();
-
-        // 5) Synkkaa nappulat näkymään
-        SyncAllPiecesFromState();
-
-        // 6) Kamera keskelle ja skaalaa oikein aspectin mukaan
-        CenterAndFitCamera();
-
-        // 7) AI-mode
-        switch (aiMode)
-        {
-            case AiMode.Random: ai = new RandomAi(); break;
-            case AiMode.Greedy: ai = new GreedyAi(); break;
-            default: ai = null; break; // None -> kaksinpeli
-        }
-
-        DumpStateSnapshot("start");
     }
 
     void OnDestroy()
@@ -250,7 +219,7 @@ public class BoardView : MonoBehaviour
     }
 
 
-    void SetupStartPosition()
+    public void SetupClassicStart()
     {
         // Valkoinen
         _state.Set(new Coord(0, 0), WhiteRookDef.Build("white"));

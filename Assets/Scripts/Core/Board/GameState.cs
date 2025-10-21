@@ -223,20 +223,6 @@ namespace Shakki.Core
                     yield return m;
         }
 
-        // Pelin päättyminen
-        public enum EndReason { KingCaptured, DoubleKO }
-
-        public readonly struct GameEndInfo
-        {
-            public string WinnerColor { get; }
-            public string LoserColor { get; }
-            public EndReason Reason { get; }
-            public int PlyCount { get; }  // siirtoparit * 2 => käytetään MoveHistory.Count
-
-            public GameEndInfo(string winner, string loser, EndReason reason, int plyCount)
-            { WinnerColor = winner; LoserColor = loser; Reason = reason; PlyCount = plyCount; }
-        }
-
         public event Action<GameEndInfo>? OnGameEnded;
 
         public bool IsGameOver { get; private set; }
