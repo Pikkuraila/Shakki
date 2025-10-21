@@ -43,12 +43,14 @@ namespace Shakki.Core
 
         public bool ApplyMove(Move m, IRulesResolver rules)
         {
+            if (IsGameOver) return false;         // UUSI: ei siirtoja pelin jälkeen
+
             if (m.From.X == m.To.X && m.From.Y == m.To.Y) return false;
 
             var piece = Get(m.From);
             if (piece == null || piece.Owner != CurrentPlayer) return false;
 
-            // Legal check
+            // Legal check (ennallaan)
             bool legal = false;
             foreach (var lm in GenerateLegalMoves(m.From, rules))
             {
@@ -61,10 +63,9 @@ namespace Shakki.Core
             if (target != null && target.Owner != piece.Owner)
                 OnCaptured?.Invoke(m.To, target);
 
-            // En passant (ruudukolle)
+            // En passant (ennallaan)
             if (piece.TypeName == "Pawn" && target == null && LastMove.HasValue)
             {
-                // EP = diagonaalisiirto tyhjään ruutuun, edellinen oli vastapuolen tuplahyppy viereisestä tiedostosta
                 int dx = m.To.X - m.From.X, dy = m.To.Y - m.From.Y;
                 bool diagonal = Math.Abs(dx) == 1 && Math.Abs(dy) == 1;
 
@@ -84,13 +85,12 @@ namespace Shakki.Core
                 }
             }
 
-            // Tornitus (kuningas liikkuu 2 vaakaruutua)
+            // Tornitus (ennallaan)
             if (piece.TypeName == "King" && m.To.Y == m.From.Y && Math.Abs(m.To.X - m.From.X) == 2)
             {
                 int dir = (m.To.X > m.From.X) ? +1 : -1;
                 int y = m.From.Y;
 
-                // Skannaa kuninkaan suuntaan kunnes löytyy eka nappula; jos se on oma torni, siirrä
                 int x = m.From.X;
                 Coord? rookFrom = null;
                 while (true)
@@ -122,15 +122,32 @@ namespace Shakki.Core
             Set(m.From, null);
             piece.HasMoved = true;
 
-            // Päivitykset
+            // Päivitykset (TÄRKEÄ: kirjaa siirto ennen mahdollisen game overin triggeriä)
             LastMove = m;
             LastMoveEffectiveTypeName = string.IsNullOrEmpty(m.AsTypeName) ? piece.TypeName : m.AsTypeName;
             MoveHistory.Add(m);
 
+            // --- GAME OVER -POLKU ---
+            // 1) Nopea haara: jos kohteena oli kuningas, peli loppuu heti
+            if (target != null && target.TypeName == "King")
+            {
+                IsGameOver = true;
+                WinnerColor = piece.Owner;
+                LoserColor = target.Owner;
+                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor, EndReason.KingCaptured, MoveHistory.Count));
+                return true;                       // HUOM: ei vuoronvaihtoa, ei OnTurnChanged
+            }
+
+            // 2) Varmistus: jos jokin erikoissääntö olisi poistanut kuninkaan muualla, skannaa
+            if (CheckGameEnd())
+                return true;                       // peli päättyi => ei vuoronvaihtoa
+
+            // Normaalitilanne: vaihda vuoro ja ilmoita
             CurrentPlayer = (CurrentPlayer == "white") ? "black" : "white";
             OnTurnChanged?.Invoke(CurrentPlayer);
             return true;
         }
+
 
         public List<Move> AllMoves(string color, IRulesResolver rules = null)
         {
@@ -205,5 +222,70 @@ namespace Shakki.Core
                 foreach (var m in rule.Generate(ctx2))
                     yield return m;
         }
+
+        // Pelin päättyminen
+        public enum EndReason { KingCaptured, DoubleKO }
+
+        public readonly struct GameEndInfo
+        {
+            public string WinnerColor { get; }
+            public string LoserColor { get; }
+            public EndReason Reason { get; }
+            public int PlyCount { get; }  // siirtoparit * 2 => käytetään MoveHistory.Count
+
+            public GameEndInfo(string winner, string loser, EndReason reason, int plyCount)
+            { WinnerColor = winner; LoserColor = loser; Reason = reason; PlyCount = plyCount; }
+        }
+
+        public event Action<GameEndInfo>? OnGameEnded;
+
+        public bool IsGameOver { get; private set; }
+        public string? WinnerColor { get; private set; }
+        public string? LoserColor { get; private set; }
+
+        private bool HasKing(string color)
+        {
+            foreach (var c in AllCoords())
+            {
+                var p = Get(c);
+                if (p != null && p.Owner == color && p.TypeName == "King")
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Skannaa tilanteen ja päättää pelin, jos toisen (tai molempien) kuningas puuttuu.
+        /// Palauttaa true jos peli päättyi tässä kutsussa.
+        /// </summary>
+        public bool CheckGameEnd()
+        {
+            if (IsGameOver) return true;
+
+            bool whiteHas = HasKing("white");
+            bool blackHas = HasKing("black");
+            if (whiteHas && blackHas) return false;
+
+            IsGameOver = true;
+
+            if (whiteHas && !blackHas)
+            {
+                WinnerColor = "white"; LoserColor = "black";
+                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor, EndReason.KingCaptured, MoveHistory.Count));
+            }
+            else if (!whiteHas && blackHas)
+            {
+                WinnerColor = "black"; LoserColor = "white";
+                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor, EndReason.KingCaptured, MoveHistory.Count));
+            }
+            else
+            {
+                WinnerColor = null; LoserColor = null;
+                OnGameEnded?.Invoke(new GameEndInfo(null, null, EndReason.DoubleKO, MoveHistory.Count));
+            }
+            return true;
+        }
+
+
     }
 }

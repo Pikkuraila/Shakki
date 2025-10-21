@@ -29,7 +29,7 @@ Tavoite: pitää kehitystyö jäsenneltynä ja helposti päivitettävänä Gitin
 ## 🔹 Lyhyen aikavälin tehtävät
 
 - [X] Tehdään pelilaudasta modulaarinen ja helposti generoitava.
-- [ ] Toteuta `GameState.CheckGameEnd()` ja `OnGameEnded`.
+- [X] Toteuta `GameState.CheckGameEnd()` ja `OnGameEnded`.
 - [ ] Luo `ShopScene` ja UI.
 - [ ] Toteuta `PlayerData` (coins, ownedPieces, upgrades).
 - [ ] Tee `CampaignState` + `EncounterSO`-malli.
