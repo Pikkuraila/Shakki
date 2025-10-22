@@ -116,12 +116,12 @@ TextureImporter:
       name: WhitePawn_0
       rect:
         serializedVersion: 2
-        x: 7
-        y: 2
-        width: 50
-        height: 57
+        x: 0
+        y: 0
+        width: 100
+        height: 100
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -138,7 +138,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: e63f47f896dbb3d4a9d4ee543b1d463d
     internalID: 0
     vertices: []
     indices: 
