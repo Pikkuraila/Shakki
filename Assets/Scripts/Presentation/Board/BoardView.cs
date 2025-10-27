@@ -117,6 +117,7 @@ public class BoardView : MonoBehaviour
     private Coord? _selected;
 
 
+
     public enum AiMode
     {
         None,
@@ -157,6 +158,7 @@ public class BoardView : MonoBehaviour
 
     void Awake()
     {
+        EnsureRuntimeRoots();
         _defByType.Clear();
         foreach (var def in AllPieceDefs)
         {
@@ -167,11 +169,10 @@ public class BoardView : MonoBehaviour
 
     void OnDestroy()
     {
-        if (_state != null)
-        {
-            _state.OnTurnChanged -= HandleTurnChanged;
-            _state.OnCaptured    -= HandleCapture;
-        }
+        // Siivotaan elegantisti, mutta ei tuhoa itseään uudelleen jos Unity jo tuhoaa
+        try { Teardown(destroySelfGO: false); } catch { }
+
+        // (Ei tarvitse enää erikseen -= eventit, Teardown hoitaa sen.)
     }
 
     void CenterAndFitCamera()
@@ -279,7 +280,7 @@ public class BoardView : MonoBehaviour
             var prefab = isLight ? TileLightPrefab : TileDarkPrefab;
 
             var pos = new Vector3(c.X * tileSize, c.Y * tileSize, 0f);
-            var go = Instantiate(prefab, pos, Quaternion.identity, transform);
+            var go = Instantiate(prefab, pos, Quaternion.identity, TilesParent);
             go.name = $"Tile_{c.X}_{c.Y}";
 
             // 2) Aina alle nappuloiden
@@ -298,8 +299,15 @@ public class BoardView : MonoBehaviour
 
     public void ClearHighlightsPublic()
     {
-        foreach (var h in _highlights) Destroy(h);
+        foreach (var h in _highlights) if (h) Destroy(h);
         _highlights.Clear();
+
+        // Varmuussiivous: jos juureen jäi jotain
+        if (HLParent != null)
+        {
+            for (int i = HLParent.childCount - 1; i >= 0; i--)
+                Destroy(HLParent.GetChild(i).gameObject);
+        }
     }
 
     public void ShowHighlightsPublic(IEnumerable<Move> moves)
@@ -307,7 +315,7 @@ public class BoardView : MonoBehaviour
         ClearHighlightsPublic();
         foreach (var m in moves)
         {
-            var go = Instantiate(HighlightPrefab, new Vector3(m.To.X, m.To.Y, -0.1f), Quaternion.identity, transform);
+            var go = Instantiate(HighlightPrefab, new Vector3(m.To.X, m.To.Y, -0.1f), Quaternion.identity, HLParent);
             _highlights.Add(go);
         }
     }
@@ -322,6 +330,9 @@ public class BoardView : MonoBehaviour
 
     public bool TryDropPublic(PieceView pv, (int x, int y) from, (int x, int y) to, List<Move> cached)
     {
+        if (_state == null || _state.IsGameOver) return false; // jos sinulla on IsGameOver-lippu
+
+
         try
         {
             // --- perusguardit ---
@@ -377,7 +388,10 @@ public class BoardView : MonoBehaviour
 
     void SyncAllPiecesFromState()
     {
-        foreach (var pv in _pieceViews.Values) if (pv) Destroy(pv.gameObject);
+        // Tyhjennä vain nappulajuuri, älä koko BoardView’n lapsia
+        for (int i = PiecesParent.childCount - 1; i >= 0; i--)
+            Destroy(PiecesParent.GetChild(i).gameObject);
+
         _pieceViews.Clear();
 
         foreach (var c in _state.AllCoords())
@@ -385,7 +399,6 @@ public class BoardView : MonoBehaviour
             var p = _state.Get(c);
             if (p == null) continue;
 
-            // hae def
             if (!_defByType.TryGetValue(p.TypeName, out var def))
             {
                 Debug.LogWarning($"Puuttuu PieceDefSO tyypille {p.TypeName}");
@@ -393,7 +406,7 @@ public class BoardView : MonoBehaviour
             }
 
             var prefab = def.viewPrefabOverride != null ? def.viewPrefabOverride : PiecePrefab;
-            var go = Instantiate(prefab, new Vector3(c.X, c.Y, -1f), Quaternion.identity, transform);
+            var go = Instantiate(prefab, new Vector3(c.X, c.Y, -1f), Quaternion.identity, PiecesParent);
 
             // SpriteRenderer – varmista että löytyy juuresta tai lapsesta
             var sr = go.GetComponent<SpriteRenderer>();
@@ -668,5 +681,87 @@ public class BoardView : MonoBehaviour
         _aiRunning = false;
         Trace("DoAiMove: end");
     }
+
+    [Header("Runtime Roots (optional)")]
+    public Transform tilesRoot;
+    public Transform piecesRoot;
+    public Transform highlightsRoot;
+    public Transform overlaysRoot; // jos käytät
+
+    bool _teardownDone;
+
+    // Luo puuttuvat rootit automaattisesti
+    void EnsureRuntimeRoots()
+    {
+        Transform Make(string name)
+        {
+            var t = new GameObject(name).transform;
+            t.SetParent(transform, worldPositionStays: false);
+            return t;
+        }
+
+        if (tilesRoot == null) tilesRoot = transform.Find("Tiles") ?? Make("Tiles");
+        if (piecesRoot == null) piecesRoot = transform.Find("Pieces") ?? Make("Pieces");
+        if (highlightsRoot == null) highlightsRoot = transform.Find("Highlights") ?? Make("Highlights");
+        if (overlaysRoot == null) overlaysRoot = transform.Find("Overlays") ?? Make("Overlays");
+    }
+
+    public void Teardown(bool destroySelfGO = true)
+    {
+        if (_teardownDone) return;
+        _teardownDone = true;
+
+        // 1) pysäytä boardiin liittyvät koroutinet
+        try { StopAllCoroutines(); } catch { }
+
+        // 2) irrota eventit _statelta (jos vielä kiinni)
+        try
+        {
+            if (_state != null)
+            {
+                _state.OnTurnChanged -= HandleTurnChanged;
+                _state.OnCaptured -= HandleCapture;
+            }
+        }
+        catch { }
+
+        // 3) tyhjennä highlightit
+        try { ClearHighlightsPublic(); } catch { }
+
+        // 4) tuhoa kaikki runtime-lapset juurista
+        void DestroyChildrenOf(Transform root)
+        {
+            if (root == null) return;
+            for (int i = root.childCount - 1; i >= 0; i--)
+                Destroy(root.GetChild(i).gameObject);
+        }
+
+        DestroyChildrenOf(highlightsRoot);
+        DestroyChildrenOf(piecesRoot);
+        DestroyChildrenOf(tilesRoot);
+        DestroyChildrenOf(overlaysRoot);
+
+        // 5) tyhjennä välimuistit / viitteet
+        _pieceViews.Clear();
+        _tiles.Clear();
+        _highlights.Clear();
+        _selected = null;
+        _cachedMoves?.Clear();
+        _aiRunning = false;
+        ai = null;
+        _rules = null;
+        _state = null;
+
+        // 6) disabloi ja haluttaessa tuhoa oma GO
+        enabled = false;
+        if (destroySelfGO)
+            Destroy(gameObject);
+    }
+
+    // Pieni apu: valitse parent aina rootista jos se on olemassa
+    Transform PiecesParent => piecesRoot != null ? piecesRoot : transform;
+    Transform TilesParent => tilesRoot != null ? tilesRoot : transform;
+    Transform HLParent => highlightsRoot != null ? highlightsRoot : transform;
+
 }
 

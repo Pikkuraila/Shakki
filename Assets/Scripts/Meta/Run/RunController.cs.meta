@@ -1,2 +1,18 @@
 fileFormatVersion: 2
 guid: 6373ac1c9bd043649a4c081fb250c0d6
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - boardView: {instanceID: 0}
+  - catalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
+  - encounterOverride: {instanceID: 0}
+  - slotMap: {fileID: 11400000, guid: addf4891963dd274a8def68a8f2d4487, type: 2}
+  - template: {instanceID: 0}
+  - shopPanel: {instanceID: 0}
+  - miniboard: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

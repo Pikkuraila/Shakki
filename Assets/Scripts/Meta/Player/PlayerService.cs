@@ -23,6 +23,23 @@ public sealed class PlayerService : MonoBehaviour
         _store = new JsonDataStore();
         if (!_store.TryLoad(out var loaded)) loaded = CreateDefault();
         Data = loaded;
+
+        if (Data.version < 3)
+        {
+            // päivitys haluamaasi “uuteen totuuteen”
+            Data.ownedPieceIds = new List<string> { "King", "Pawn", "Rook" };  // pieni starttipooli
+                                                                               // jos haluat, päivitä myös meta:
+            Data.loadout = new List<LoadoutEntry> {
+        new(){ pieceId="King",  count=1 },
+        new(){ pieceId="Pawn",  count=2 },
+        new(){ pieceId="Rook",  count=1 },
+    };
+            // pakota slotit rakentumaan Expandista (ei käytetä vanhaa klassista listaa)
+            Data.loadoutSlots = null;
+
+            Data.version = 3;
+            Save();
+        }
     }
 
     private PlayerData CreateDefault()
@@ -30,16 +47,16 @@ public sealed class PlayerService : MonoBehaviour
         return new PlayerData
         {
             coins = 0,
-            ownedPieceIds = new List<string> { "King", "Queen", "Rook", "Bishop", "Knight", "Pawn" },
+            // Omistaa vain muutaman perusnappulan alussa:
+            ownedPieceIds = new List<string> { "King", "Pawn", "Rook" }, // esimerkki
+                                                                         // Ei täyttä pawnlineä:
             loadout = new List<LoadoutEntry> {
-            new(){ pieceId="Queen",  count=1 },
-            new(){ pieceId="Rook",   count=2 },
-            new(){ pieceId="Bishop", count=2 },
-            new(){ pieceId="Knight", count=2 },
-            new(){ pieceId="Pawn",   count=8 },
+            new(){ pieceId="King",  count=1 },
+            new(){ pieceId="Pawn",  count=2 },
+            new(){ pieceId="Rook",  count=1 },
         },
             upgrades = new List<UpgradeInstance>(),
-            powerups = new List<PowerupStack>(), // tyhjä aluksi
+            powerups = new List<PowerupStack>(),
             lastRunSeed = null,
             runsCompleted = 0
         };

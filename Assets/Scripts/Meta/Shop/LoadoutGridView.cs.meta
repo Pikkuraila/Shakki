@@ -1,0 +1,22 @@
+fileFormatVersion: 2
+guid: 38eab039cb2e15c4aab08c2585e2d8a3
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - grid: {instanceID: 0}
+  - slotPrefab: {fileID: 1212317562683359099, guid: 0b518114ecfdacf4c8210a5e7e1d56cf, type: 3}
+  - pieceIconPrefab: {fileID: 403555075349045580, guid: c316d4e8018a2874ca423b8526393a2c, type: 3}
+  - playerService: {instanceID: 0}
+  - gameCatalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
+  - coinsText: {instanceID: 0}
+  - slotMap: {fileID: 11400000, guid: 7fd9726945da895429d28bd7918573ec, type: 2}
+  - dragLayer: {instanceID: 0}
+  - worldDragController: {instanceID: 0}
+  - worldDragLayer: {instanceID: 0}
+  - worldCamera: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

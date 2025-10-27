@@ -70,6 +70,11 @@ public class PieceView : MonoBehaviour
         name = $"Piece_{TypeLabel}_{Owner}_{x}_{y}";
     }
 
+    public void RefreshColliderForSprite()
+    {
+        EnsureCollider2D(); // kutsuu jo olemassa olevaa privaattia metodia
+    }
+
     // --- UUSI: varmistaa että BoxCollider2D on olemassa ja oikein mitoitettu ---
     void EnsureCollider2D()
     {

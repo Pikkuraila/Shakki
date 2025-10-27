@@ -1,0 +1,13 @@
+fileFormatVersion: 2
+guid: 97bc79f3a641a2b41bb257ce6205d3ff
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - lightSprite: {fileID: -7848646513626008252, guid: 6a3f90a3fd11f6e4faede98346a6827c, type: 3}
+  - darkSprite: {fileID: -6326777030527200638, guid: 3963101aa9fad2446a3dd7ac0363cfda, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -1,4 +1,4 @@
-// Assets/Scripts/Meta/Player/PlayerData.cs
+﻿// Assets/Scripts/Meta/Player/PlayerData.cs
 using System;
 using System.Collections.Generic;
 
@@ -8,19 +8,22 @@ public sealed class PlayerData
     public int version = 1;
     public int coins = 0;
 
-    // Omistettu sis�lt�
-    public List<string> ownedPieceIds = new(); // esim. "Rook","Amazon","Alfil"
+    public List<string> ownedPieceIds = new();
     public List<UpgradeInstance> upgrades = new();
 
-    // ---- UUSI: Pre-battle loadout ----
-    public List<LoadoutEntry> loadout = new(); // esim. {("Rook",2),("Bishop",2),("Knight",2),("Queen",1),("Pawn",8),"King" implisiittisesti}
+    // META (johdettu/kompressoitu): “montako kutakin”
+    public List<LoadoutEntry> loadout = new();
 
-    // ---- UUSI: Powerup-varasto (meta) ----
-    public List<PowerupStack> powerups = new(); // esim. {"SwapPiece": 2, "PromotePawn":1}
+    // UI/TOTUUS: 16 paikkaa, tyhjä = ""
+    public List<string> loadoutSlots = new();   // pituus 16
 
-    // (valinnainen) viimeisin siemen, run-statit jne.
+    public List<PowerupStack> powerups = new();
+
     public string lastRunSeed;
     public int runsCompleted = 0;
+
+
+
 }
 
 [Serializable] public sealed class UpgradeInstance { public string upgradeId; public int level; }

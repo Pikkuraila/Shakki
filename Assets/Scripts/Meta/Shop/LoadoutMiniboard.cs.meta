@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 60ba0ab6bebbf0c4b884ed66f361146f
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - playerService: {instanceID: 0}
+  - catalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
+  - pricing: {fileID: 11400000, guid: ba07632b7776ad2449a72b0f740ba736, type: 2}
+  - loadoutRoot: {instanceID: 0}
+  - shopRoot: {instanceID: 0}
+  - pieceViewPrefab: {instanceID: 0}
+  - coinsText: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
