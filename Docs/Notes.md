@@ -35,22 +35,47 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] Unicornio - Ensin liikkuu kuin heppa ja sit ampuu ku lähetti. Vahva piissi.
 - [ ] Griffin - liikkuu nurkittain jatkaa siitä 8 suuntaan ku torni. Eli liiku or
 
-Yhdistelmänappuja.
+## 🔹 Yhdistelmänappuja.
 - [X] Empress - heppa + torni.
 - [X] Amazon - kuningatar + torni + lähetti. Todella vahva.
 - [X] Archbishop - heppa + lähetti.
 
-## 🔹 Ideat - Sotilas
+## 🔹 - Sotilas
 - [ ] Voi syödä toisiaan jotta ne upgradettaa.
 - [ ] Voi liikkua johonkin extra suuntaan.
 - [ ] Voi liikkua extra kerran.
 - [ ] Kopioi takana olevan upseerin liikkumiskyky.
 
+## 🔹 - tilet
+- [ ] Lasitile, menee rikki sen jälkee ku siitä siirtyy pois. (synergia lasinappuloiden kans? esim ne ei riko niitä ku liikkuvat)
+- [ ] Ansa joka tappaa suoraan jos siihe astuu. laukeaa vain kerran.
+- [ ] Random powerup Extravuoro, pommi jne. Aktivoituu heti.
+- [ ] Pakottaa liikkumaan johonki viereiseen.
 
 
-## 🔹 Ideat - kuninkaita
+## 🔹 - kuninkaita
+
+- [ ] soltut jakaa abilityt
+- [ ] Viereiset nappulat liikkuu kuin nappula kuningatar nickname: Lesbian.
+- [ ] Ympärillä olevat ruudut on X.
+- [ ] Aavekuningas: voi liikkua ruutuihin missä on muitakin. Jos on samassa ruudussa ku oma ni ne syödää molemmat. Vastustajan "posessoinnissa" sua ei voida syödä.
+- [ ] 
 
 
+## 🔹 Boss encounters
+
+- [ ] Gothamchess joka syöttää vitusti torneja suihin.
+- [ ] "porvari" joka vihaa sotilaita
+- [ ] Neukkuteemainen jolla on paljon sotilaita ja ne jakaa abilityt. Alussa ei abilityja mut saa niitä paljon laudalta jos ei pidä kurissa.
+- [ ] 
+
+## 🔹 Powerups
+
+- [ ] 
+
+## 🔹 Kuninkaille lisättävät abilityt (Tarot?)
+
+- [ ] 
 
 ## 🔹 Pohdintaa
 

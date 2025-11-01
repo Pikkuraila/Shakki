@@ -984,24 +984,6 @@ MonoBehaviour:
   loadoutView: {fileID: 0}
   shopView: {fileID: 0}
   dragLayer: {fileID: 0}
-  worldDragController: {fileID: 0}
-  worldDragLayer: {fileID: 0}
-  worldCamera: {fileID: 0}
-  worldZPlane: 0
-  uiFollowSpeed: 25
-  uiTiltMaxDeg: 10
-  uiTiltResponsiveness: 12
-  uiTiltBankFactor: 6
-  uiScaleWhileDrag: 1.06
-  uiSquashBySpeed: 0.015
-  uiSquashMax: 0.06
-  uiIllegalShakeDur: 0.08
-  uiIllegalShakeAmp: 8
-  uiSnapBackDur: 0.12
-  uiSnapToDur: 0.12
-  uiLandSquash: 0.06
-  uiLandRebound: 0.04
-  _placeholderRT: {fileID: 0}
 --- !u!1 &1000172493
 GameObject:
   m_ObjectHideFlags: 0
@@ -1090,17 +1072,6 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 8672906759766086746, guid: 903d9f642d098a44fa16db05b7d5f79e, type: 3}
   m_PrefabInstance: {fileID: 8931679767569071152}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1013189294 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 1096890706642499120, guid: 903d9f642d098a44fa16db05b7d5f79e, type: 3}
-  m_PrefabInstance: {fileID: 8931679767569071152}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1013189293}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 076bde4145c9d17498aac8aef5138532, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &1013189296
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1116,27 +1087,9 @@ MonoBehaviour:
   typeName: 
   originKind: 0
   originIndex: 0
-  loadoutView: {fileID: 0}
-  shopView: {fileID: 0}
+  loadoutView: {fileID: 1864458692}
+  shopView: {fileID: 1000172495}
   dragLayer: {fileID: 0}
-  worldDragController: {fileID: 0}
-  worldDragLayer: {fileID: 0}
-  worldCamera: {fileID: 0}
-  worldZPlane: 0
-  uiFollowSpeed: 25
-  uiTiltMaxDeg: 10
-  uiTiltResponsiveness: 12
-  uiTiltBankFactor: 6
-  uiScaleWhileDrag: 1.06
-  uiSquashBySpeed: 0.015
-  uiSquashMax: 0.06
-  uiIllegalShakeDur: 0.08
-  uiIllegalShakeAmp: 8
-  uiSnapBackDur: 0.12
-  uiSnapToDur: 0.12
-  uiLandSquash: 0.06
-  uiLandRebound: 0.04
-  _placeholderRT: {fileID: 0}
 --- !u!1 &1135563080
 GameObject:
   m_ObjectHideFlags: 0
@@ -1689,9 +1642,6 @@ MonoBehaviour:
   boardHeight: 2
   uiOriginTopLeft: 0
   dragLayer: {fileID: 0}
-  worldDragController: {fileID: 1013189294}
-  worldDragLayer: {fileID: 372057063}
-  worldCamera: {fileID: 519420031}
 --- !u!1 &1975001425
 GameObject:
   m_ObjectHideFlags: 0
