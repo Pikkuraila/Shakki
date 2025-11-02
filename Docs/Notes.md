@@ -31,7 +31,7 @@ DUMPPAA KAIKKI TÄNNE
 - [X] Jokeri - Liikkuu kuin viimeisein tyyppi tai kuningas.
 - [ ] Unicornio - Ensin liikkuu kuin heppa ja sit ampuu ku lähetti. Vahva piissi.
 - [ ] Griffin - liikkuu nurkittain jatkaa siitä 8 suuntaan ku torni. 
-- [ ] GO:nappula? Syö poistamalla vapaudet? Kuningas?
+- [ ] Tammi nappula joka voi loikkuia nurkittain muiden yli ja jatkaa liikkumista jos se syö. "legendary"
 
 ## 🔹 Yhdistelmänappuja.
 - [X] Empress - heppa + torni.
@@ -57,8 +57,11 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] soltut jakaa abilityt
 - [ ] Viereiset nappulat liikkuu kuin nappula kuningatar nickname: Drag-King
 - [ ] Ympärillä olevat ruudut on X.
-- [ ] Aavekuningas: voi liikkua ruutuihin missä on muitakin.
+- [ ] Aavekuningas - voi liikkua ruutuihin missä on muitakin.
 - [ ] Saa syödä omia nappuloita.
+- [ ] Paavi + lähetin liike - 4 lähettiä alussa
+- [ ] Leijonakuningas + Leijonan liike - Sil on vaa eläin nappuloita alussa
+- [ ] Arkkitehti (gotham) + tornin liike - 4 tornia alussa
 
 
 ## 🔹 Boss encounters
