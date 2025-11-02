@@ -30,10 +30,16 @@ Tavoite: pitää kehitystyö jäsenneltynä ja helposti päivitettävänä Gitin
 
 ## 🔹 Lyhyen aikavälin tehtävät
 
-- [X] Tehdään pelilaudasta modulaarinen ja helposti generoitava.
-- [X] Toteuta `GameState.CheckGameEnd()` ja `OnGameEnded`.
-- [ ] Luo `ShopScene` ja UI.
-- [X] Toteuta `PlayerData` (coins, ownedPieces, upgrades).
+- [X] Luo `ShopScene` ja UI.
+- [ ] Kauppa kokonaan funktionaaliseksi.
+
+TO DO:
+- [ ] Kaupasta ostettaess ostettu nappula ei respawnaa.
+- [ ] Ostettaessa massit vähenee
+- [ ] Nappuloita voi heittää "roskiin"
+
+
+
 - [ ] Tee `CampaignState` + `EncounterSO`-malli.
 - [ ] Tee `IBattleModifier` + pari esimerkkiä (Fog, Heal).
 - [ ] Toteuta `RuleSetSO` + editor-validointi.

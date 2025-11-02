@@ -62,6 +62,7 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] Paavi + lähetin liike - 4 lähettiä alussa
 - [ ] Leijonakuningas + Leijonan liike - Sil on vaa eläin nappuloita alussa
 - [ ] Arkkitehti (gotham) + tornin liike - 4 tornia alussa
+- [ ] King in yellow - taikuri jolla on vitusti lähettejä.
 
 
 ## 🔹 Boss encounters
