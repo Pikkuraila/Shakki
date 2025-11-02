@@ -267,34 +267,66 @@ public class BoardView : MonoBehaviour
     }
 
 
+    // Pidä nämä public/serialized kentät BoardViewissä:
+    [SerializeField] private string tilesSortingLayer = "BoardTiles";
+    [SerializeField] private int tilesSortingOrder = 0;
+    [SerializeField] private float tilesZ = 0f;
+
+    // ...BuildBoardTiles sisällä:
     void BuildBoardTiles()
     {
         // 0) Siivoa vanhat
         foreach (var go in _tiles.Values) if (go) Destroy(go);
         _tiles.Clear();
 
+        // Varmista että parent on päällä
+        if (TilesParent != null && !TilesParent.gameObject.activeSelf)
+            TilesParent.gameObject.SetActive(true);
+
         // 1) Rakenna laatat vain sallituille koordinaateille
-        foreach (var c in _state.AllCoords()) // huom! ei for y<x GameState.H/W
+        foreach (var c in _state.AllCoords())
         {
             bool isLight = ((c.X + c.Y) & 1) == 0;
             var prefab = isLight ? TileLightPrefab : TileDarkPrefab;
 
-            var pos = new Vector3(c.X * tileSize, c.Y * tileSize, 0f);
+            // Turvasuoja: älä kaadu vaikka prefab puuttuisi
+            if (prefab == null)
+            {
+                Debug.LogWarning($"[BoardView] Tile prefab missing for {(isLight ? "Light" : "Dark")} – using empty GO.");
+                prefab = new GameObject("Tile_Fallback");
+                prefab.AddComponent<SpriteRenderer>(); // tyhjä SR, väri täytetään alla
+            }
+
+            var pos = new Vector3(c.X * tileSize, c.Y * tileSize, tilesZ);
             var go = Instantiate(prefab, pos, Quaternion.identity, TilesParent);
             go.name = $"Tile_{c.X}_{c.Y}";
 
-            // 2) Aina alle nappuloiden
-            if (go.TryGetComponent<SpriteRenderer>(out var sr))
-                sr.sortingOrder = 0;
+            // 2) Aina alle nappuloiden: pakota layer & order & enabled
+            if (!go.TryGetComponent<SpriteRenderer>(out var sr))
+                sr = go.AddComponent<SpriteRenderer>();
 
-            // 3) TileView init (jos käytössä)
+            // Pakota perusmateriaali (jos FX on rikkonut sen)
+            if (sr.sharedMaterial == null || sr.sharedMaterial.shader == null)
+                sr.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
+
+            sr.sortingLayerName = tilesSortingLayer; // esim. "BoardTiles"
+            sr.sortingOrder = tilesSortingOrder;     // esim. 0
+            sr.enabled = true;                       // varmistus
+
+            // 3) TileView init + kovitetut värit (täysi alpha)
             var tv = go.GetComponent<TileView>() ?? go.AddComponent<TileView>();
-            var color = isLight ? new Color(0.92f, 0.92f, 0.92f) : new Color(0.6f, 0.63f, 0.65f);
+            var color = isLight ? new Color(0.92f, 0.92f, 0.92f, 1f)
+                                : new Color(0.60f, 0.63f, 0.65f, 1f);
             tv.Init(c.X, c.Y, this, color);
+
+            // Jos prefabissa ei ole spriteä (fallback), täytä yksivärisellä (SpriteRenderer.color toimii ilman spriteäkin)
+            if (sr.sprite == null)
+                sr.color = color;
 
             _tiles[(c.X, c.Y)] = go;
         }
     }
+
 
 
     public void ClearHighlightsPublic()

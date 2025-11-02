@@ -12,6 +12,9 @@ public class DropSlot : MonoBehaviour, IDropHandler
     [Header("Refs")]
     public LoadoutGridView loadoutView;
     public ShopGridView shopView;
+    public InventoryGridView inventoryView; // NEW
+
+
 
     public void OnDrop(PointerEventData eventData)
     {
@@ -28,9 +31,14 @@ public class DropSlot : MonoBehaviour, IDropHandler
                 shopView.HandleDropToShop(this, drag);
                 break;
 
+            case SlotKind.Inventory when inventoryView != null:
+                inventoryView.HandleDropToInventory(this, drag);
+                break;
+
             default:
                 Debug.LogWarning($"[DropSlot] Unknown kind={kind} or missing reference.");
                 break;
         }
     }
+
 }

@@ -103,29 +103,37 @@ public class LoadoutGridView : MonoBehaviour
         int total = boardWidth * boardHeight;
         for (int ui = 0; ui < total; ui++)
         {
+            // 1. Luo slotti
             var slotGO = Instantiate(slotPrefab, grid.transform);
             _slots.Add(slotGO);
 
-            // RT venyy soluun → lapsi-ikonin on helppo täyttää sen
+            // 2. Layout-säädöt (kuten sulla jo oli)
             var slotRT = (RectTransform)slotGO.transform;
             slotRT.anchorMin = new Vector2(0, 0);
             slotRT.anchorMax = new Vector2(1, 1);
             slotRT.offsetMin = Vector2.zero;
             slotRT.offsetMax = Vector2.zero;
 
-            // TÄRKEÄ: slotti EI saa ignoorata layoutia → muuten Grid ei anna kokoa
             var slotLE = slotGO.GetComponent<LayoutElement>() ?? slotGO.AddComponent<LayoutElement>();
             slotLE.ignoreLayout = false;
             slotLE.flexibleWidth = 0;
             slotLE.flexibleHeight = 0;
-            // anna eksplisiittinen koko gridin cellSizen mukaan (helpottaa mittauksia)
             slotLE.preferredWidth = grid.cellSize.x;
             slotLE.preferredHeight = grid.cellSize.y;
 
-            // Näkyvä tausta
+            // 3. Taustakuva (Image + ChessSlotSkin)
             var bg = slotGO.GetComponent<Image>() ?? slotGO.AddComponent<Image>();
-            if (bg.color.a < 0.05f) bg.color = new Color(0, 0, 0, 0.1f);
+            bg.color = Color.white; // varmista ettei ole haalea
 
+            var skin = slotGO.GetComponent<ChessSlotSkin>();
+            if (skin != null)
+            {
+                skin.index = ui;              // visuaalinen ruutujärjestys
+                skin.columnsOverride = boardWidth; // tai 0 jos haluat lukea Gridistä
+                skin.Apply();
+            }
+
+            // 4. DropSlot asetukset (dataindeksi jne.)
             var dataIndex = _uiToSlot[ui];
             var slot = slotGO.GetComponent<DropSlot>() ?? slotGO.AddComponent<DropSlot>();
             slot.kind = SlotKind.Loadout;
@@ -133,9 +141,23 @@ public class LoadoutGridView : MonoBehaviour
             slot.loadoutView = this;
         }
 
+
         _built = true;
         Debug.Log($"[LoadoutGridView] Built {_slots.Count} UI slots. Children in grid: {grid.transform.childCount}");
         RefreshAll();
+    }
+
+    void RefreshAllSkins()
+    {
+        for (int ui = 0; ui < _slots.Count; ui++)
+        {
+            var skin = _slots[ui].GetComponent<ChessSlotSkin>();
+            if (skin != null)
+            {
+                skin.index = ui;
+                skin.Apply();
+            }
+        }
     }
 
     void BuildUiToSlotMapping()
@@ -201,7 +223,19 @@ public class LoadoutGridView : MonoBehaviour
 
         EnsureDataSlots(_slots.Count);
 
-        // Käy UI-solut läpi ja piirrä ikonit niiden DATA-indeksin mukaan
+        // 1) Päivitä shakkitaustat (UI-indeksin mukaan)
+        for (int ui = 0; ui < _slots.Count; ui++)
+        {
+            var skin = _slots[ui].GetComponent<ChessSlotSkin>();
+            if (skin != null)
+            {
+                skin.index = ui;   // käytä visuaalista järjestystä, ei dataindeksiä
+                                   // (valinnainen) skin.columnsOverride = boardWidth; // jos haluat lukita sarakemäärän
+                skin.Apply();
+            }
+        }
+
+        // 2) Piirrä ikonit DATA-indeksin mukaan
         for (int ui = 0; ui < _slots.Count; ui++)
             RefreshSlotByUiIndex(ui);
     }
@@ -347,11 +381,62 @@ public class LoadoutGridView : MonoBehaviour
     {
         if (drag == null || target == null) return;
 
+        // --- A) SHOP → LOADOUT: PIECE ostetaan tyhjään ruutuun ---
+        if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Piece)
+        {
+            if (!string.IsNullOrEmpty(GetTypeAt(target.index))) return;     // vaatii tyhjän slotin
+            if (_loadout != null && !_loadout.CanAfford(drag.payloadId)) return;
+
+            SuppressDataIndexOnce(target.index);
+
+            if (_loadout == null || _loadout.TryBuy(drag.payloadId))
+            {
+                SetTypeAt(target.index, drag.payloadId);
+                drag.shopView?.RefreshAll();
+                StartCoroutine(CoRefreshAfterDrag());
+                drag.MarkConsumed(target.index);
+            }
+            return;
+        }
+
+        // --- B) SHOP → LOADOUT: POWERUP instant nappulaan ---
+        if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Powerup)
+        {
+            // vaatii, että kohdeslotissa on NAPPULA
+            var currentPiece = GetTypeAt(target.index);
+            if (string.IsNullOrEmpty(currentPiece)) return;
+
+            if (_loadout != null && !_loadout.CanAfford(drag.payloadId)) return;
+
+            // osto + apply
+            if (_loadout == null || _loadout.TryBuy(drag.payloadId))
+            {
+                // Toteuta ApplyPowerupToSlot data-tasolla (LoadoutServiceen)
+                // esim: bool ApplyPowerupToSlot(int slotIndex, string powerupId)
+                bool ok = _loadout.ApplyPowerupToSlot(target.index, drag.payloadId);
+                if (!ok) { /* halutessa refund / viesti */ }
+
+                // UI päivitys
+                SuppressDataIndexOnce(target.index);
+                StartCoroutine(CoRefreshAfterDrag());
+                drag.shopView?.RefreshAll();
+                drag.MarkConsumed(target.index);
+            }
+            return;
+        }
+
+        // --- C) SHOP → INVENTORY: ITEM/POWERUP talteen (InventoryGridissä käsitellään) ---
+        if (drag.originKind == SlotKind.Shop && drag.payloadKind != DragPayloadKind.Piece)
+        {
+            // Jos tiputetaan loadoutille mutta ei kelpaa → älä tee mitään
+            return;
+        }
+
+        // --- D) LOADOUT ↔ LOADOUT: swappaus (entinen koodisi) ---
         if (drag.originKind == SlotKind.Loadout)
         {
             if (drag.originIndex == target.index) return;
 
-            // Estä lähdeslotin välivälähdys
             SuppressDataIndexOnce(drag.originIndex);
 
             var a = GetTypeAt(drag.originIndex);
@@ -359,30 +444,12 @@ public class LoadoutGridView : MonoBehaviour
             SetTypeAt(drag.originIndex, b);
             SetTypeAt(target.index, a);
 
-            // Älä refreshaa heti -> hoidetaan ko. korutiinilla
             StartCoroutine(CoRefreshAfterDrag());
             drag.MarkConsumed(target.index);
             return;
         }
-
-        if (drag.originKind == SlotKind.Shop)
-        {
-            if (_loadout != null && !_loadout.CanAfford(drag.typeName)) return;
-            if (!string.IsNullOrEmpty(GetTypeAt(target.index))) return;
-
-            // Tässä ei ole varsinaista “lähdeslottia” loadoutissa, mutta jos haluat
-            // varman päälle: suppressaa target ennen ensimmäistä piirtoa
-            SuppressDataIndexOnce(target.index);
-
-            if (_loadout == null || _loadout.TryBuy(drag.typeName))
-            {
-                SetTypeAt(target.index, drag.typeName);
-                drag.shopView?.RefreshAll();
-                StartCoroutine(CoRefreshAfterDrag());
-                drag.MarkConsumed(target.index);
-            }
-        }
     }
+
 
     GameObject CreateFallbackIcon(Transform parent, string label)
     {

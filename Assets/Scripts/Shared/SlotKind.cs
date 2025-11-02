@@ -1,1 +1,1 @@
-public enum SlotKind { Loadout, Shop }
+public enum SlotKind { Loadout, Shop, Inventory = 3 }

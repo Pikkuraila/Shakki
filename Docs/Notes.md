@@ -7,14 +7,11 @@ DUMPPAA KAIKKI TÄNNE
 ## 🔹 Ideat
 
 - [ ] “Shakkimiekka” – nappula joka yhdistää hevosen ja tornin (hyppää + jatkaa). onks täs mitää järkeä? aichat illuusio hä?
-- [ ] Makrolauta voisi muuttua visuaalisesti pelaajan etenemisen myötä.
-- [ ] Kaupassa voisi näkyä “tarjouksia” jotka vaihtuvat jokaisen voiton jälkeen.
-- [ ] Pelaajalla voisi olla “komentajahahmo” jolla on yksi tai useampi uniikki passiivinen kyky.
 - [ ] Vihollisilla voisi olla “AI-persoonat” (KnightLover, BishopHater jne.).
 - [ ] Jokaisella bossilla voisi olla erikoisavausteksti (“My pawns bleed for me.”). 
 - [ ] Bossit käyttäis samaa dialogisysteemiä ku Greco. Puhuis myös samalla tavalla.
 - [ ] Jos tulee käytettäviä itemeitä kuten freeze ja jump spell ni ne käytetään aina ennen siirtoa.
-- [ ] Saa syödä omia nappuloita.
+
 - [ ] Sotilaat lähtökohtasesti jakaa kuninkaan abilityt. synergiat solttujen ja upseerien välillä fokukseks?
 - [ ] Spessu kauppa jossa voi lihamyllätä nappuloitaan yhteen jotta niistä tulee uusia.
 - [ ] alustava value systeemi kaikille nappuloille.
@@ -24,7 +21,7 @@ DUMPPAA KAIKKI TÄNNE
 	Torni - 5
 	Kuningatar - 9
 	Kuningas - 100
-
+- [ ] Kun nappula heitetään "roskiin" ni sen voi legit "heittää" Tän pitää tuntua tyydyttävältä.
 
 ---
 
@@ -33,7 +30,8 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] Leijona - Kolme mihi tahansa suuntaa ja sen viereiset ruudut.
 - [X] Jokeri - Liikkuu kuin viimeisein tyyppi tai kuningas.
 - [ ] Unicornio - Ensin liikkuu kuin heppa ja sit ampuu ku lähetti. Vahva piissi.
-- [ ] Griffin - liikkuu nurkittain jatkaa siitä 8 suuntaan ku torni. Eli liiku or
+- [ ] Griffin - liikkuu nurkittain jatkaa siitä 8 suuntaan ku torni. 
+- [ ] GO:nappula? Syö poistamalla vapaudet? Kuningas?
 
 ## 🔹 Yhdistelmänappuja.
 - [X] Empress - heppa + torni.
@@ -51,15 +49,16 @@ DUMPPAA KAIKKI TÄNNE
 - [ ] Ansa joka tappaa suoraan jos siihe astuu. laukeaa vain kerran.
 - [ ] Random powerup Extravuoro, pommi jne. Aktivoituu heti.
 - [ ] Pakottaa liikkumaan johonki viereiseen.
-
+- [ ] Promootiotile
+- [ ] Spesifipromootiotile (knight,amazon jne). 
 
 ## 🔹 - kuninkaita
 
 - [ ] soltut jakaa abilityt
-- [ ] Viereiset nappulat liikkuu kuin nappula kuningatar nickname: Lesbian.
+- [ ] Viereiset nappulat liikkuu kuin nappula kuningatar nickname: Drag-King
 - [ ] Ympärillä olevat ruudut on X.
-- [ ] Aavekuningas: voi liikkua ruutuihin missä on muitakin. Jos on samassa ruudussa ku oma ni ne syödää molemmat. Vastustajan "posessoinnissa" sua ei voida syödä.
-- [ ] 
+- [ ] Aavekuningas: voi liikkua ruutuihin missä on muitakin.
+- [ ] Saa syödä omia nappuloita.
 
 
 ## 🔹 Boss encounters

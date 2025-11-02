@@ -14,6 +14,10 @@ public sealed class UIDraggablePiece :
     public ShopGridView shopView;     // saa olla null
     public static event System.Action AnyDragEnded;
 
+
+    public DragPayloadKind payloadKind = DragPayloadKind.Piece;
+    public string payloadId; // piece.typeName / powerup.id / item.id
+
     [Header("Drag Layer (Canvas child)")]
     public RectTransform dragLayer;      // jätä tyhjäksi → luodaan/runtime
 

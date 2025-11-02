@@ -808,6 +808,7 @@ MonoBehaviour:
   shopPanel: {fileID: 1599480351}
   loadoutView: {fileID: 1864458692}
   shopView: {fileID: 1000172495}
+  defaultShopPool: {fileID: 11400000, guid: 2a9a13ae76ee3dc4fb55b453ea1ede8b, type: 2}
 --- !u!1 &876922738
 GameObject:
   m_ObjectHideFlags: 0
@@ -954,36 +955,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 3798660589651812381, guid: c316d4e8018a2874ca423b8526393a2c, type: 3}
   m_PrefabInstance: {fileID: 1885869912694903865}
   m_PrefabAsset: {fileID: 0}
---- !u!225 &961715500
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 961715498}
-  m_Enabled: 1
-  m_Alpha: 1
-  m_Interactable: 1
-  m_BlocksRaycasts: 1
-  m_IgnoreParentGroups: 0
---- !u!114 &961715505
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 961715498}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ace327465c033dd47bec1710fff3e772, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  typeName: 
-  originKind: 0
-  originIndex: 0
-  loadoutView: {fileID: 0}
-  shopView: {fileID: 0}
-  dragLayer: {fileID: 0}
 --- !u!1 &1000172493
 GameObject:
   m_ObjectHideFlags: 0
@@ -1033,15 +1004,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f6156340a4bc6843a6ac56f4ea17029, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pool: {fileID: 0}
+  playerService: {fileID: 0}
   grid: {fileID: 1000172496}
   slotPrefab: {fileID: 1606704458}
   pieceIconPrefab: {fileID: 961715498}
-  ShopItems:
-  - {fileID: 11400000, guid: 105d833b3e9639a4b93f5494be607800, type: 2}
-  - {fileID: 11400000, guid: 105d833b3e9639a4b93f5494be607800, type: 2}
-  - {fileID: 11400000, guid: 105d833b3e9639a4b93f5494be607800, type: 2}
-  - {fileID: 11400000, guid: 105d833b3e9639a4b93f5494be607800, type: 2}
   gameCatalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
+  pricing: {fileID: 0}
+  visibleSlots: 4
+  preventDuplicatesInRow: 1
+  lightTile: {fileID: 0}
+  darkTile: {fileID: 0}
   dragLayer: {fileID: 0}
 --- !u!114 &1000172496
 MonoBehaviour:
@@ -1089,6 +1062,8 @@ MonoBehaviour:
   originIndex: 0
   loadoutView: {fileID: 1864458692}
   shopView: {fileID: 1000172495}
+  payloadKind: 0
+  payloadId: 
   dragLayer: {fileID: 0}
 --- !u!1 &1135563080
 GameObject:
@@ -1304,7 +1279,7 @@ Transform:
   m_GameObject: {fileID: 1478142893}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 7.3208, y: 4.9143, z: 0}
+  m_LocalPosition: {x: -19.57, y: -0.13, z: 0}
   m_LocalScale: {x: 33.50661, y: 20.409252, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1418,6 +1393,7 @@ MonoBehaviour:
   index: -1
   loadoutView: {fileID: 0}
   shopView: {fileID: 0}
+  inventoryView: {fileID: 0}
 --- !u!225 &1606704461
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -1539,6 +1515,9 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 3d2ddfb07c5134a4fb6b9cd193c86b61, type: 2}
   - {fileID: 11400000, guid: 2a452427f3bb82b42a238cb14da578a3, type: 2}
   aiMode: 1
+  tilesSortingLayer: BoardTiles
+  tilesSortingOrder: 0
+  tilesZ: 0
   tilesRoot: {fileID: 0}
   piecesRoot: {fileID: 0}
   highlightsRoot: {fileID: 0}
@@ -1773,17 +1752,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    m_RemovedComponents:
-    - {fileID: 6887631274502213990, guid: c316d4e8018a2874ca423b8526393a2c, type: 3}
+    m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 403555075349045580, guid: c316d4e8018a2874ca423b8526393a2c, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 961715500}
-    - targetCorrespondingSourceObject: {fileID: 403555075349045580, guid: c316d4e8018a2874ca423b8526393a2c, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 961715505}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: c316d4e8018a2874ca423b8526393a2c, type: 3}
 --- !u!1001 &3967468542302233750
 PrefabInstance:
@@ -1973,5 +1945,5 @@ SceneRoots:
   - {fileID: 1711210144}
   - {fileID: 8931679767569071152}
   - {fileID: 815260987}
-  - {fileID: 1478142895}
   - {fileID: 372057063}
+  - {fileID: 1478142895}

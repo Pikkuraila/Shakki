@@ -1,2 +1,21 @@
 fileFormatVersion: 2
 guid: 3f6156340a4bc6843a6ac56f4ea17029
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - pool: {fileID: 11400000, guid: 2a9a13ae76ee3dc4fb55b453ea1ede8b, type: 2}
+  - playerService: {instanceID: 0}
+  - grid: {instanceID: 0}
+  - slotPrefab: {fileID: 1212317562683359099, guid: 0b518114ecfdacf4c8210a5e7e1d56cf, type: 3}
+  - pieceIconPrefab: {fileID: 403555075349045580, guid: c316d4e8018a2874ca423b8526393a2c, type: 3}
+  - gameCatalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
+  - pricing: {fileID: 11400000, guid: ba07632b7776ad2449a72b0f740ba736, type: 2}
+  - lightTile: {fileID: -7848646513626008252, guid: 6a3f90a3fd11f6e4faede98346a6827c, type: 3}
+  - darkTile: {fileID: -6326777030527200638, guid: 3963101aa9fad2446a3dd7ac0363cfda, type: 3}
+  - dragLayer: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -125,4 +125,31 @@ public sealed class LoadoutService
     // SHIM: haku katalogista (molemmat nimet tuettu)
     public PieceDefSO TryGetPieceDef(string id) => _catalog.GetPieceById(id);
     public PieceDefSO TryGetPiece(string id) => _catalog.GetPieceById(id);
+
+
+    public bool ApplyPowerupToSlot(int slotIndex, string powerupId)
+    {
+        var slots = _player.Data.loadoutSlots;
+        if (slots == null || slotIndex < 0 || slotIndex >= slots.Count) return false;
+        if (string.IsNullOrEmpty(slots[slotIndex])) return false; // tyhjässä ei ole nappulaa
+
+        var def = _catalog.GetPowerupById(powerupId); // toteutetaan alla
+        if (def == null) return false;
+
+        EnsureSlotPowerupListExists(slotIndex);
+        var list = _player.Data.slotPowerups[slotIndex];
+        if (!list.Contains(powerupId)) list.Add(powerupId);
+
+        _player.Save();
+        return true;
+    }
+
+    private void EnsureSlotPowerupListExists(int slotIndex)
+    {
+        if (_player.Data.slotPowerups == null) _player.Data.slotPowerups = new List<List<string>>();
+        while (_player.Data.slotPowerups.Count <= slotIndex) _player.Data.slotPowerups.Add(new List<string>());
+    }
+
+
+
 }

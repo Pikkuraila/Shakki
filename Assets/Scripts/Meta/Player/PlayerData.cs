@@ -22,6 +22,10 @@ public sealed class PlayerData
     public string lastRunSeed;
     public int runsCompleted = 0;
 
+    public List<string> inventoryIds = new();          // inventory-gridin sisältö
+    public List<List<string>> slotPowerups = new();    // per-slot liitetyt powerup-id:t
+
+
 
 
 }

@@ -30,7 +30,8 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private LoadoutGridView loadoutView;   // 8×2
     [SerializeField] private ShopGridView shopView;         // 4×1
 
-
+    [Header("Shop Data")]
+    [SerializeField] private ShopPoolSO defaultShopPool;
 
 
     private GameState _state;
@@ -118,29 +119,62 @@ public sealed class RunController : MonoBehaviour
 
     private void OpenShop()
     {
-        // Estä input + drags ennen UI:ta
+        // 0) Estä pelilaudan input
         if (boardView != null) boardView.enabled = false;
         var drag = FindObjectOfType<DragController>();
         if (drag != null) { drag.StopAllCoroutines(); drag.enabled = false; }
 
-        // Täytä slotit kerran jos tyhjät
-        EnsureSlotsOnce(16);
+        // 1) Täytä slotit kerran jos tyhjät
+        EnsureSlotsOnce(Slots);
 
-        // DIAG: näytä mitä dataan jäi
+        // 2) Diagnoosi mitä sloteissa on
         var pd = PlayerService.Instance.Data;
-        Debug.Log($"[ShopOpen] slots={pd.loadoutSlots?.Count ?? 0} " +
-                  $"sample=[{string.Join(",", (pd.loadoutSlots ?? new System.Collections.Generic.List<string>()).GetRange(0, System.Math.Min(8, pd.loadoutSlots?.Count ?? 0)))}]");
+        Debug.Log($"[ShopOpen] slots={pd.loadoutSlots?.Count ?? 0} sample=[{string.Join(",", (pd.loadoutSlots ?? new System.Collections.Generic.List<string>()).GetRange(0, System.Math.Min(8, pd.loadoutSlots?.Count ?? 0)))}]");
 
-        // Näytä UI
+
+        // 3) Loadout-grid pystyyn
+        if (loadoutView != null)
+        {
+            loadoutView.BuildIfNeeded();
+            loadoutView.RefreshAll();
+        }
+
+        // 4) Resolvaa shop-näkymä nimenomaan panelin alta (ettei löydy väärä instanssi)
+        ShopGridView shop = shopView;
+        if (shop == null)
+        {
+            if (shopPanel != null)
+                shop = shopPanel.GetComponentInChildren<ShopGridView>(true);
+            if (shop == null)
+                shop = FindObjectOfType<ShopGridView>(true); // viimeinen oljenkorsi
+        }
+
+        // 5) Resolvaa depsit
+        var svc = PlayerService.Instance != null ? PlayerService.Instance : FindObjectOfType<PlayerService>(true);
+        var pool = defaultShopPool;
+
+        // 6) Selkeä DI-loki ennen setuppia
+        var svcName = svc != null ? svc.name : "NULL";
+        var poolName = pool != null ? pool.name : "NULL";
+        var shopPath = shop != null ? shop.gameObject.scene.name + "/" + shop.gameObject.name : "NULL";
+        Debug.Log($"[OpenShop] DI → svc={svcName}, pool={poolName}, shop={shopPath}");
+
+        if (shop == null) { Debug.LogError("[OpenShop] ShopGridView puuttuu scenestä."); return; }
+        if (svc == null) { Debug.LogError("[OpenShop] PlayerService puuttuu."); return; }
+        if (pool == null) { Debug.LogError("[OpenShop] ShopPoolSO (defaultShopPool) puuttuu. Aseta Inspectorissa."); return; }
+
+        // 7) Anna depsit ENSIN (Shopin Awake/OnEnable ei tarvitse olla ajettu)
+        shop.Setup(svc, pool);
+
+        // 8) Aktivoi UI vasta nyt (Setup tehty → OnEnable/Refresh voi toimia)
         if (shopPanel != null) shopPanel.SetActive(true);
 
-        // Rakenna gridit ennen refreshiä
-        if (loadoutView != null) { loadoutView.BuildIfNeeded(); loadoutView.RefreshAll(); }
-
-        var shop = shopView != null ? shopView : FindObjectOfType<ShopGridView>();
-        if (shop != null) { shop.BuildIfNeeded(); shop.RefreshAll(); }
+        // 9) (Valinnainen) Refresh — Setup kutsuu jo RebuildFromPool(), joten tämä on ylimääräinen
+        // shop.RebuildFromPool();
     }
-         
+
+
+
     // UI-nappi: “Jatka”
     public void ContinueFromShop()
     {
