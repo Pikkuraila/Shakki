@@ -1,4 +1,4 @@
-// Assets/Scripts/Meta/Player/PlayerService.cs
+Ôªø// Assets/Scripts/Meta/Player/PlayerService.cs
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -26,15 +26,15 @@ public sealed class PlayerService : MonoBehaviour
 
         if (Data.version < 3)
         {
-            // p‰ivitys haluamaasi ìuuteen totuuteenî
+            // p√§ivitys haluamaasi ‚Äúuuteen totuuteen‚Äù
             Data.ownedPieceIds = new List<string> { "King", "Pawn", "Rook" };  // pieni starttipooli
-                                                                               // jos haluat, p‰ivit‰ myˆs meta:
+                                                                               // jos haluat, p√§ivit√§ my√∂s meta:
             Data.loadout = new List<LoadoutEntry> {
         new(){ pieceId="King",  count=1 },
         new(){ pieceId="Pawn",  count=2 },
         new(){ pieceId="Rook",  count=1 },
     };
-            // pakota slotit rakentumaan Expandista (ei k‰ytet‰ vanhaa klassista listaa)
+            // pakota slotit rakentumaan Expandista (ei k√§ytet√§ vanhaa klassista listaa)
             Data.loadoutSlots = null;
 
             Data.version = 3;
@@ -49,7 +49,7 @@ public sealed class PlayerService : MonoBehaviour
             coins = 0,
             // Omistaa vain muutaman perusnappulan alussa:
             ownedPieceIds = new List<string> { "King", "Pawn", "Rook" }, // esimerkki
-                                                                         // Ei t‰ytt‰ pawnline‰:
+                                                                         // Ei t√§ytt√§ pawnline√§:
             loadout = new List<LoadoutEntry> {
             new(){ pieceId="King",  count=1 },
             new(){ pieceId="Pawn",  count=2 },
@@ -150,4 +150,31 @@ public sealed class PlayerService : MonoBehaviour
         OnChanged?.Invoke(); Save();
         return true;
     }
+
+    // --- Run reset (coins + t√§m√§n runin lauta) ---
+    public void ResetRun()
+    {
+        // 1) Rahat nollaan
+        Data.coins = 0;
+
+        // 2) Tyhjenn√§ t√§m√§n runin gridit
+        if (Data.inventoryIds != null)
+            Data.inventoryIds.Clear();
+
+        if (Data.slotPowerups != null)
+            Data.slotPowerups.Clear();
+
+        // 3) Pakota loadoutSlots rakentumaan uudestaan metasta
+        //    (EnsureSlotsOnce huomaa nullin ‚Üí Expand loadoutista)
+        Data.loadoutSlots = null;
+
+        // 4) Halutessa voidaan my√∂s nollata seed tms.
+        Data.lastRunSeed = null;
+
+        OnChanged?.Invoke();
+        Save();
+    }
+
+
+
 }

@@ -384,46 +384,71 @@ public class LoadoutGridView : MonoBehaviour
         // --- A) SHOP → LOADOUT: PIECE ostetaan tyhjään ruutuun ---
         if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Piece)
         {
-            if (!string.IsNullOrEmpty(GetTypeAt(target.index))) return;     // vaatii tyhjän slotin
-            if (_loadout != null && !_loadout.CanAfford(drag.payloadId)) return;
+            // vaatii tyhjän slotin
+            if (!string.IsNullOrEmpty(GetTypeAt(target.index)))
+            {
+                Debug.Log("[LoadoutDrop] target slot not empty, cannot buy.");
+                return;
+            }
+
+            // täytyy olla viittaus shoppiin
+            var shop = drag.shopView;
+            if (shop == null)
+            {
+                Debug.LogWarning("[LoadoutDrop] drag.shopView missing, cannot purchase from shop.");
+                return;
+            }
+
+            // yritä ostaa kaupasta (tämä hoitaa kolikot + slotin tyhjennyksen)
+            if (!shop.TryPurchase(drag, out var price, out var reason))
+            {
+                Debug.Log($"[LoadoutDrop] purchase failed: {reason}");
+                // halutessasi: drag.SnapBack();
+                return;
+            }
+
+            // tästä eteenpäin ostos on maksettu ja itemi poistettu kaupasta
 
             SuppressDataIndexOnce(target.index);
+            SetTypeAt(target.index, drag.payloadId);   // laita nappula loadout-slottiin
 
-            if (_loadout == null || _loadout.TryBuy(drag.payloadId))
-            {
-                SetTypeAt(target.index, drag.payloadId);
-                drag.shopView?.RefreshAll();
-                StartCoroutine(CoRefreshAfterDrag());
-                drag.MarkConsumed(target.index);
-            }
+            StartCoroutine(CoRefreshAfterDrag());
+            drag.MarkConsumed(target.index);
             return;
         }
 
-        // --- B) SHOP → LOADOUT: POWERUP instant nappulaan ---
+        // B) SHOP → johonkin: POWERUP
         if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Powerup)
         {
-            // vaatii, että kohdeslotissa on NAPPULA
-            var currentPiece = GetTypeAt(target.index);
-            if (string.IsNullOrEmpty(currentPiece)) return;
-
-            if (_loadout != null && !_loadout.CanAfford(drag.payloadId)) return;
-
-            // osto + apply
-            if (_loadout == null || _loadout.TryBuy(drag.payloadId))
+            var shop = drag.shopView;
+            if (shop == null)
             {
-                // Toteuta ApplyPowerupToSlot data-tasolla (LoadoutServiceen)
-                // esim: bool ApplyPowerupToSlot(int slotIndex, string powerupId)
-                bool ok = _loadout.ApplyPowerupToSlot(target.index, drag.payloadId);
-                if (!ok) { /* halutessa refund / viesti */ }
-
-                // UI päivitys
-                SuppressDataIndexOnce(target.index);
-                StartCoroutine(CoRefreshAfterDrag());
-                drag.shopView?.RefreshAll();
-                drag.MarkConsumed(target.index);
+                Debug.LogWarning("[LoadoutDrop] no shopView on drag (powerup)");
+                return;
             }
+
+            if (!shop.TryPurchase(drag, out var price, out var reason))
+            {
+                Debug.Log($"[LoadoutDrop] powerup purchase failed: {reason}");
+                return;
+            }
+
+            // Tästä eteenpäin powerup on maksettu ja poistettu kaupasta
+
+            // Esimerkki: lisää pelaajalle powerup-stackiin
+            var ps = PlayerService.Instance;
+            ps.AddPowerup(drag.payloadId, 1);
+
+            // Jos powerup on slottikohtainen, voit myös:
+            //   ps.Data.slotPowerups[target.index].Add(drag.payloadId);
+            //   jne.
+
+            StartCoroutine(CoRefreshAfterDrag());
+            drag.MarkConsumed(target.index);
             return;
         }
+
+    
 
         // --- C) SHOP → INVENTORY: ITEM/POWERUP talteen (InventoryGridissä käsitellään) ---
         if (drag.originKind == SlotKind.Shop && drag.payloadKind != DragPayloadKind.Piece)

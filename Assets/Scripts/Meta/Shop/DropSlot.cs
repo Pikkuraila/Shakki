@@ -6,13 +6,13 @@ public class DropSlot : MonoBehaviour, IDropHandler
 {
 
     [Header("Meta")]
-    public SlotKind kind;              // <-- tämä kenttä oli puuttunut
+    public SlotKind kind;             
     public int index = -1;
 
     [Header("Refs")]
     public LoadoutGridView loadoutView;
     public ShopGridView shopView;
-    public InventoryGridView inventoryView; // NEW
+    public InventoryGridView inventoryView;
 
 
 

@@ -96,25 +96,37 @@ public sealed class RunController : MonoBehaviour
     // ---------- PELI → KAUPPA ----------
     private void OnGameEnded(GameEndInfo info)
     {
-        // 0) Palkinto talteen ensin (tai viimeistään tässä)
-        var reward = (info.WinnerColor == "white") ? 10 : 3;
-        PlayerService.Instance.AddCoins(reward);
+        // Pelaajan nappulat on valkoisia → white = pelaaja
+        bool playerWon = info.WinnerColor == "white";
 
-        // 1) Siivoa ja piilota lauta
-        if (boardView != null)
+        if (playerWon)
         {
-            // Tyhjentää laatat, nappulat, highlightit, eventit, koroutinet – muttei tuhoa GO:ta
-            boardView.Teardown(destroySelfGO: false);
-            boardView.gameObject.SetActive(false);   // varma piilotus, mikään ei jää piirtymään
+            // 0) Palkinto vain voitosta
+            var reward = 10;
+            PlayerService.Instance.AddCoins(reward);
+
+            // 1) Siivoa ja piilota lauta
+            if (boardView != null)
+            {
+                boardView.Teardown(destroySelfGO: false);
+                boardView.gameObject.SetActive(false);
+            }
+
+            // 2) Estä mahdolliset dragit
+            var drag = FindObjectOfType<DragController>();
+            if (drag != null) { drag.StopAllCoroutines(); drag.enabled = false; }
+
+            // 3) Avaa shop normaaliin tapaan
+            OpenShop();
         }
-
-        // 2) Estä mahdolliset dragit
-        var drag = FindObjectOfType<DragController>();
-        if (drag != null) { drag.StopAllCoroutines(); drag.enabled = false; }
-
-        // 3) Avaa shop
-        OpenShop();
+        else
+        {
+            // Pelaaja hävisi → koko runi nollataan
+            Debug.Log("[Run] Player lost → hard reset run + restart");
+            ResetRunAndRestart();
+        }
     }
+
 
 
     private void OpenShop()
@@ -316,4 +328,24 @@ public sealed class RunController : MonoBehaviour
             }
         }
     }
+
+    public void OnResetButtonPressed()
+    {
+        ResetRunAndRestart();
+    }
+
+    public void ResetRunAndRestart()
+    {
+        var ps = PlayerService.Instance;
+        if (ps != null)
+            ps.ResetRun();
+
+        // Sulje shop-paneli jos se on auki
+        if (shopPanel != null)
+            shopPanel.SetActive(false);
+
+        // Käynnistä uusi peli puhtaalta pöydältä
+        StartNewEncounter();
+    }
+
 }

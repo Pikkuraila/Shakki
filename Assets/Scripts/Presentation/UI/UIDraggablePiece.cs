@@ -33,6 +33,7 @@ public sealed class UIDraggablePiece :
 
     Vector2 _frozenSize;
     bool _dragging;
+    bool _consumed;
 
     // ----------------------------------------------------
     // Pomminvarma komponenttien varmistus
@@ -162,6 +163,19 @@ public sealed class UIDraggablePiece :
     {
         if (!_dragging) return;
 
+        // Jos tämä drag on kulutettu (ostettu / siirretty), älä snapbackaa
+        if (_consumed)
+        {
+            _dragging = false;
+            s_IsDraggingAny = false;
+
+            try { AnyDragEnded?.Invoke(); } catch { }
+
+            // Tämä on vain visuaalinen kopio, gridi piirtää oikean ikoninsa itse
+            Destroy(gameObject);
+            return;
+        }
+
         // Palauta raycastit
         _cg.blocksRaycasts = true;
         if (_img) _img.raycastTarget = true;
@@ -171,7 +185,6 @@ public sealed class UIDraggablePiece :
         {
             transform.SetParent(_originalParent, worldPositionStays: false);
 
-            // venytä takaisin solun täyteen kokoon
             _rt.anchorMin = Vector2.zero;
             _rt.anchorMax = Vector2.one;
             _rt.offsetMin = Vector2.zero;
@@ -186,7 +199,11 @@ public sealed class UIDraggablePiece :
     }
 
     // --- Nämä on jätetty tyhjiksi, koska muu koodi kutsuu joskus näitä ---
-    public void MarkConsumed(int newIndex) { /* no-op UI-versiossa */ }
+    public void MarkConsumed(int newIndex)
+    {
+        _consumed = true;   // 👈 nyt tämä tekee jotain
+    }
+
     public System.Collections.IEnumerator AcceptUIFx() { yield break; }
     public System.Collections.IEnumerator RejectUIFx(RectTransform back) { yield break; }
     public void MarkFxControlled() { /* no-op */ }

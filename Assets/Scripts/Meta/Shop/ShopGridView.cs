@@ -347,7 +347,6 @@ public class ShopGridView : MonoBehaviour
 
         if (pricing == null || playerService == null) { reason = "pricing/svc missing"; return false; }
 
-        // Hae kohde-item: uiIndex -> item (drag.originIndex = UI-slot, jos et täytä sitä, ota match payloadilla)
         ShopItemDefSO picked = null;
         if (_uiToItem.TryGetValue(drag.originIndex, out var byUi)) picked = byUi;
         if (picked == null)
@@ -359,26 +358,46 @@ public class ShopGridView : MonoBehaviour
         }
         if (picked == null) { reason = "item not in roll"; return false; }
 
+        var pd = playerService.Data;
+        var coinsBefore = pd.coins;
+        Debug.Log($"[Shop] TryPurchase payloadId={drag.payloadId}, picked={picked.name}, coinsBefore={coinsBefore}");
+
         // Laske hinta
-        if (picked.piece != null) price = pricing.GetPriceForPiece(picked.piece.typeName, playerService.Data);
-        else if (picked.powerup != null) price = pricing.GetPriceForPowerup(picked.powerup.id, playerService.Data);
-        else if (picked.item != null) price = pricing.GetPrice(picked.item.id, playerService.Data); // <-- tämä
+        if (picked.piece != null) price = pricing.GetPriceForPiece(picked.piece.typeName, pd);
+        else if (picked.powerup != null) price = pricing.GetPriceForPowerup(picked.powerup.id, pd);
+        else if (picked.item != null) price = pricing.GetPrice(picked.item.id, pd);
 
+        Debug.Log($"[Shop] Computed price={price} for {picked.name}");
 
-        if (playerService.Data.coins < price) { reason = "not enough coins"; return false; }
+        // Turva: 0- tai negatiivinen hinta EI ole ok
+        if (price <= 0)
+        {
+            reason = "invalid price";
+            Debug.LogError($"[Shop] INVALID PRICE {price} for {picked.name} (payloadId={drag.payloadId}). Check ShopPricingSO ids.");
+            return false;
+        }
 
-        // Veloita
-        playerService.AddCoins(-price);
+        if (!playerService.SpendCoins(price))
+        {
+            reason = "not enough coins";
+            Debug.Log($"[Shop] SpendCoins FAILED: coinsBefore={coinsBefore}, needed={price}");
+            return false;
+        }
 
-        // Poista itemi rollista (EI täytetä uudella)
+        Debug.Log($"[Shop] SpendCoins OK: {coinsBefore} -> {playerService.Data.coins}");
+
         int idx = _roll.IndexOf(picked);
         if (idx >= 0)
         {
-            _roll[idx] = null;         // jätä tyhjäksi
-            RefreshSlot(idx);          // päivitä juuri ostettu slotti tyhjäksi
+            _roll[idx] = null;
+            RefreshSlot(idx);
         }
+
         return true;
     }
+
+
+
 
 
 }
