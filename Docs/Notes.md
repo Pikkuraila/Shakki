@@ -22,6 +22,7 @@ DUMPPAA KAIKKI TÄNNE
 	Kuningatar - 9
 	Kuningas - 100
 - [ ] Kun nappula heitetään "roskiin" ni sen voi legit "heittää" Tän pitää tuntua tyydyttävältä.
+- [ ] Uhkapeli eventti. Siihen plinko mekaniikka. Eli gaussin-käyrä generaattori.
 
 ---
 

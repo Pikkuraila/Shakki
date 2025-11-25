@@ -17,7 +17,6 @@ public class ShopGridView : MonoBehaviour
     [SerializeField] private GameObject slotPrefab;
     [SerializeField] private GameObject pieceIconPrefab;
     [SerializeField] private GameCatalogSO gameCatalog;
-    [SerializeField] private ShopPricingSO pricing;
 
     [Header("Config")]
     [Min(1)] public int visibleSlots = 4;              // montako myyntipaikkaa näkyy
@@ -212,6 +211,9 @@ public class ShopGridView : MonoBehaviour
 
         if (item != null)
         {
+            // UUSI: talletetaan koko ShopItemDefSO dragille
+            drag.shopDef = item;
+
             if (item.piece != null)
             {
                 drag.payloadKind = DragPayloadKind.Piece;
@@ -277,24 +279,27 @@ public class ShopGridView : MonoBehaviour
             ? item.overrideIcon
             : (item != null && item.piece != null ? item.piece.whiteSprite : null);
 
-        // Laske hinta
+        // Laske hinta ShopItemDefSO:n kautta
         int price = 0;
-        if (item != null && pricing != null && playerService != null)
+        if (item != null)
         {
-            var pd = playerService.Data;
-
-            if (item.piece != null)
-                price = pricing.GetPriceForPiece(item.piece.typeName, pd);
-            else if (item.powerup != null)
-                price = pricing.GetPriceForPowerup(item.powerup.id, pd);
-            else if (item.item != null)
-                price = pricing.GetPrice(item.item.id, pd);   // <-- tämä korvaa GetPriceForItem
+            if (playerService != null)
+            {
+                var pd = playerService.Data;
+                // edellyttää: public int GetPrice(PlayerData data) ShopItemDefSO:ssa
+                price = item.GetPrice(pd);
+            }
+            else
+            {
+                // fallback jos playerService puuttuu
+                price = item.price;
+            }
         }
-
 
         // Bindaa kuva + hinta; showPrice aina true shopissa
         icon.Bind(sprite, price, showPrice: true);
     }
+
 
 
     // Palautus shoppiin (drop shopin päälle) — valinnainen myynti
@@ -343,40 +348,64 @@ public class ShopGridView : MonoBehaviour
 
     public bool TryPurchase(UIDraggablePiece drag, out int price, out string reason)
     {
-        price = 0; reason = null;
+        price = 0;
+        reason = null;
 
-        if (pricing == null || playerService == null) { reason = "pricing/svc missing"; return false; }
+        if (playerService == null)
+        {
+            reason = "player svc missing";
+            Debug.LogError("[Shop] PlayerService missing in TryPurchase");
+            return false;
+        }
 
+        // 1) Selvitä mikä ShopItemDefSO on kyseessä
         ShopItemDefSO picked = null;
-        if (_uiToItem.TryGetValue(drag.originIndex, out var byUi)) picked = byUi;
-        if (picked == null)
+
+        // a) ensisijaisesti suoraan dragista
+        if (drag != null && drag.shopDef != null)
+        {
+            picked = drag.shopDef;
+        }
+
+        // b) fallback: slot-indeksin kautta
+        if (picked == null && drag != null && _uiToItem.TryGetValue(drag.originIndex, out var byUi))
+        {
+            picked = byUi;
+        }
+
+        // c) fallback: etsi _roll-listasta payloadId:n perusteella
+        if (picked == null && drag != null)
         {
             picked = _roll.FirstOrDefault(it =>
                 (it?.piece != null && it.piece.typeName == drag.payloadId) ||
                 (it?.powerup != null && it.powerup.id == drag.payloadId) ||
                 (it?.item != null && it.item.id == drag.payloadId));
         }
-        if (picked == null) { reason = "item not in roll"; return false; }
+
+        if (picked == null)
+        {
+            reason = "item not in roll";
+            Debug.LogWarning($"[Shop] TryPurchase: item not found for payloadId={drag?.payloadId}");
+            return false;
+        }
 
         var pd = playerService.Data;
         var coinsBefore = pd.coins;
-        Debug.Log($"[Shop] TryPurchase payloadId={drag.payloadId}, picked={picked.name}, coinsBefore={coinsBefore}");
+        Debug.Log($"[Shop] TryPurchase payloadId={drag?.payloadId}, picked={picked.name}, coinsBefore={coinsBefore}");
 
-        // Laske hinta
-        if (picked.piece != null) price = pricing.GetPriceForPiece(picked.piece.typeName, pd);
-        else if (picked.powerup != null) price = pricing.GetPriceForPowerup(picked.powerup.id, pd);
-        else if (picked.item != null) price = pricing.GetPrice(picked.item.id, pd);
-
+        // 2) Laske hinta suoraan ShopItemDefSO:n kautta
+        price = picked.GetPrice(pd);
         Debug.Log($"[Shop] Computed price={price} for {picked.name}");
 
         // Turva: 0- tai negatiivinen hinta EI ole ok
         if (price <= 0)
         {
             reason = "invalid price";
-            Debug.LogError($"[Shop] INVALID PRICE {price} for {picked.name} (payloadId={drag.payloadId}). Check ShopPricingSO ids.");
+            Debug.LogError($"[Shop] INVALID PRICE {price} for {picked.name} (payloadId={drag?.payloadId}). Check ShopItemDefSO.price.");
             return false;
         }
 
+        // 3) Yritä veloittaa kolikot
         if (!playerService.SpendCoins(price))
         {
             reason = "not enough coins";
@@ -386,6 +415,7 @@ public class ShopGridView : MonoBehaviour
 
         Debug.Log($"[Shop] SpendCoins OK: {coinsBefore} -> {playerService.Data.coins}");
 
+        // 4) Poista ostettu itemi tämän runin rollista (tilalle ei tule uutta)
         int idx = _roll.IndexOf(picked);
         if (idx >= 0)
         {
@@ -395,7 +425,6 @@ public class ShopGridView : MonoBehaviour
 
         return true;
     }
-
 
 
 

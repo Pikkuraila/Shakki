@@ -18,6 +18,8 @@ public sealed class UIDraggablePiece :
     public DragPayloadKind payloadKind = DragPayloadKind.Piece;
     public string payloadId; // piece.typeName / powerup.id / item.id
 
+    public ShopItemDefSO shopDef;
+
     [Header("Drag Layer (Canvas child)")]
     public RectTransform dragLayer;      // jätä tyhjäksi → luodaan/runtime
 
@@ -202,6 +204,12 @@ public sealed class UIDraggablePiece :
     public void MarkConsumed(int newIndex)
     {
         _consumed = true;   // 👈 nyt tämä tekee jotain
+    }
+
+    // --- Hinta-apumetodi shopille ---
+    public int GetPrice(PlayerData pd)
+    {
+        return shopDef != null ? shopDef.GetPrice(pd) : 0;
     }
 
     public System.Collections.IEnumerator AcceptUIFx() { yield break; }
