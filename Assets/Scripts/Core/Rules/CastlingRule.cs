@@ -50,12 +50,22 @@ namespace Shakki.Core
 
                 // V‰liss‰ ei nappuloita
                 for (int x = from.X + dir; x != rookX; x += dir)
-                    if (s.Get(new Coord(x, y)) != null) return false;
+                {
+                    var between = new Coord(x, y);
+                    if (!s.Board.Contains(between)) // tai miten ikin‰ p‰‰set BoardStateen k‰siksi
+                        return false;
 
-                // Kuningas ei saa kulkea/saapua kontrolloituihin ruutuihin
+                    if (s.Get(between) != null)
+                        return false;
+                }
+
                 var oppColor = opp;
                 var step1 = new Coord(from.X + dir, y);
                 var step2 = new Coord(from.X + 2 * dir, y);
+
+                // Jos kuninkaan reitti menee laudalta ulos, linnoitus ei ole mahdollista
+                if (!s.Board.Contains(step1) || !s.Board.Contains(step2))
+                    return false;
 
                 if (s.IsSquareAttacked(step1, oppColor)) return false;
                 if (s.IsSquareAttacked(step2, oppColor)) return false;

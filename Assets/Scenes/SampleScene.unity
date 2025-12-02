@@ -688,7 +688,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Button
+  m_text: RESET
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -1280,7 +1280,6 @@ MonoBehaviour:
   slotPrefab: {fileID: 1606704458}
   pieceIconPrefab: {fileID: 961715498}
   gameCatalog: {fileID: 11400000, guid: b74c3603a56bdc449b968211aefffacb, type: 2}
-  pricing: {fileID: 11400000, guid: ba07632b7776ad2449a72b0f740ba736, type: 2}
   visibleSlots: 4
   preventDuplicatesInRow: 1
   lightTile: {fileID: -7848646513626008252, guid: 6a3f90a3fd11f6e4faede98346a6827c, type: 3}
@@ -1334,6 +1333,7 @@ MonoBehaviour:
   shopView: {fileID: 1000172495}
   payloadKind: 0
   payloadId: 
+  shopDef: {fileID: 0}
   dragLayer: {fileID: 0}
 --- !u!1 &1135563080
 GameObject:

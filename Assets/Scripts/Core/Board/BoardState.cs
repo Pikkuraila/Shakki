@@ -18,7 +18,18 @@ namespace Shakki.Core
 
         public bool Contains(Coord c) => Geometry.Contains(c);
 
-        public Piece? Get(Coord c) => _board[c.X, c.Y];
+        public Piece? Get(Coord c)
+        {
+            if (!Contains(c))
+            {
+                UnityEngine.Debug.LogError(
+                    $"[BoardState] Get OUT OF RANGE: {c} (w={Geometry.Width}, h={Geometry.Height})"
+                );
+                return null; // tai heitä exception, jos haluat kaatua heti näkyvällä viestillä
+            }
+
+            return _board[c.X, c.Y];
+        }
 
         public void Set(Coord c, Piece? p)
         {
