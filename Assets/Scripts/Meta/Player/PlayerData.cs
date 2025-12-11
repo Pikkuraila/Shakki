@@ -25,7 +25,7 @@ public sealed class PlayerData
     public List<string> inventoryIds = new();          // inventory-gridin sisältö
     public List<List<string>> slotPowerups = new();    // per-slot liitetyt powerup-id:t
 
-
+    public int macroIndex; // nykyinen sijainti makrolaudalla (0–15)
 
 
 }

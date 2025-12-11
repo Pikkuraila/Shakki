@@ -14,7 +14,6 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private SlotMapSO slotMap;               // dynaamiselle loadoutista luomiselle
     [SerializeField] private global::EnemySpec enemySpec;
 
-
     [Header("Board")]
     [SerializeField] private BoardTemplateSO template; // voi olla null
     [SerializeField] private int width = 8;
@@ -33,21 +32,244 @@ public sealed class RunController : MonoBehaviour
     [Header("Shop Data")]
     [SerializeField] private ShopPoolSO defaultShopPool;
 
+    [Header("Macro")]
+    [SerializeField] private MacroMapSO macroMap;
+    [SerializeField] private MacroBoardView macroView;
+    [SerializeField] private MacroMapGeneratorSO macroGenerator;
+
+    [Header("Macro Scaling")]
+    [SerializeField] private int baseBattleDifficulty = 1;
+    [SerializeField] private int baseShopTier = 1;
+
+    // lasketaan aina kun siirrytään uuteen macro-ruutuun
+    private int _pendingBattleDifficulty = 1;
+    private int _pendingShopTier = 1;
+
 
     private GameState _state;
     private IRulesResolver _rules;
     private const int Slots = 16;
 
-    void Start()
+    // ---------- LIFECYCLE ----------
+
+    private void Start()
     {
         BuildRules();
-        StartNewEncounter();   // käynnistetään eka peli
+        Debug.Log($"[RunController] Start macroMap={macroMap}, macroView={macroView}");
+
+        if (macroMap != null && macroView != null)
+        {
+            StartRun();
+        }
+        else
+        {
+            StartNewEncounter();
+        }
     }
 
-    void OnDestroy()
+    private void OnDestroy()
     {
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
     }
+
+    // ---------- RUN + MACRO ----------
+
+    private void StartRun()
+    {
+        BuildRules(); // varmistus, jos haluat, tai jätä kuten on – tämä voi myös olla jo kutsuttu Startissa
+
+
+        if (macroGenerator != null)
+        {
+            macroMap = macroGenerator.Generate();
+        }
+
+
+        var ps = PlayerService.Instance;
+        if (ps != null)
+        {
+            var pd = ps.Data;
+
+            int startIndex = 0;
+            if (macroMap != null)
+            {
+                int startRow = 0;
+                int startCol = macroMap.columns / 2; // keskikolumni (3 -> 1)
+                startIndex = macroMap.GetIndex(startRow, startCol);
+            }
+
+            pd.macroIndex = startIndex;
+            ps.Save();
+        }
+
+        EnterMacroPhase();
+    }
+
+
+    /// <summary>
+    /// Makrofase: piilota event-UI:t, näytä makrolauta ja anna pelaajan siirtää nappulaa.
+    /// </summary>
+    private void EnterMacroPhase()
+    {
+
+        UIDraggablePiece.s_IsDraggingAny = false;
+
+        var piece = macroView.macroPiece;
+        if (piece != null)
+        {
+            piece.SendMessage("ForceStopDrag", SendMessageOptions.DontRequireReceiver);
+        }
+
+
+
+        Debug.Log("[RunController] EnterMacroPhase()");
+
+        // Tyhjennä DragLayer varmuuden vuoksi
+        var canvas = macroView.GetComponentInParent<Canvas>();
+        if (canvas != null)
+        {
+            var dragLayer = canvas.transform.Find("DragLayer");
+            if (dragLayer != null)
+            {
+                Debug.Log("[MacroPhase] Clearing DragLayer children");
+                for (int i = dragLayer.childCount - 1; i >= 0; i--)
+                {
+                    Destroy(dragLayer.GetChild(i).gameObject);
+                }
+            }
+        }
+
+
+        var pd = PlayerService.Instance.Data;
+
+        if (shopPanel != null) shopPanel.SetActive(false);
+        if (boardView != null)
+        {
+            boardView.gameObject.SetActive(false);
+            boardView.enabled = false;
+        }
+
+        if (macroView == null || macroMap == null)
+        {
+            Debug.LogWarning("[RunController] MacroView/MacroMap puuttuu, fallback → StartNewEncounter.");
+            StartNewEncounter();
+            return;
+        }
+
+        Debug.Log($"[RunController] MacroView={macroView.name}, activeBefore={macroView.gameObject.activeSelf}");
+
+        macroView.gameObject.SetActive(true);
+        macroView.Init(macroMap, pd.macroIndex);
+        macroView.OnAdvance = HandleMacroAdvance;
+
+        Debug.Log($"[RunController] MacroView activeAfter={macroView.gameObject.activeSelf}");
+
+        // 🔧 VARMISTETAAN, että macropiece on oikeasti dragattava
+        if (macroView.macroPiece != null)
+        {
+            UIDraggablePiece.EnsureIconVisible(macroView.macroPiece.gameObject);
+        }
+
+        // (valinnainen, jos sulla on DragController käytössä)
+        var drag = FindObjectOfType<DragController>();
+        if (drag != null)
+        {
+            drag.enabled = true;
+        }
+
+        var dragPieces = GameObject.FindObjectsOfType<UIDraggablePiece>();
+        foreach (var d in dragPieces)
+        {
+            d.SendMessage("ForceStopDrag", SendMessageOptions.DontRequireReceiver);
+        }
+        UIDraggablePiece.s_IsDraggingAny = false;
+
+    }
+
+    /// <summary>
+    /// Kutsutaan kun macroPiece siirtyy seuraavaan ruutuun.
+    /// </summary>
+    private void HandleMacroAdvance(int newIndex)
+    {
+        var ps = PlayerService.Instance;
+        if (ps != null)
+        {
+            ps.Data.macroIndex = newIndex;
+            ps.Save();
+        }
+
+        if (macroView != null)
+            macroView.gameObject.SetActive(false);
+
+        if (macroMap == null)
+        {
+            Debug.LogWarning("[RunController] MacroMap puuttuu, fallback → StartNewEncounter.");
+            StartNewEncounter();
+            return;
+        }
+
+        var tile = macroMap.GetTile(newIndex);
+
+        // --- SKAALAUS: battle difficulty + shop tier ---
+        int columns = macroMap.columns;
+        int row = newIndex / columns; // mitä alempana kartalla, sitä isompi rivi
+
+        _pendingBattleDifficulty = baseBattleDifficulty + row + tile.difficultyOffset;
+        if (_pendingBattleDifficulty < 1) _pendingBattleDifficulty = 1;
+
+        _pendingShopTier = baseShopTier + row + tile.shopTierOffset;
+        if (_pendingShopTier < 1) _pendingShopTier = 1;
+
+        Debug.Log($"[RunController] MacroAdvance index={newIndex}, row={row}, type={tile.type}, " +
+                  $"battleDiff={_pendingBattleDifficulty}, shopTier={_pendingShopTier}");
+
+        // --- Avaa kyseinen eventti ---
+        OpenEventFor(tile);
+    }
+
+
+    /// <summary>
+    /// Makroruudun määrittämä eventti.
+    /// </summary>
+    private void OpenEventFor(MacroTileDef tile)
+    {
+        switch (tile.type)
+        {
+            case MacroEventType.Battle:
+                StartNewEncounter();
+                break;
+
+            case MacroEventType.Shop:
+                OpenShop();
+                break;
+
+            case MacroEventType.Rest:
+                // TODO: tee oma rest-event-UI. Nyt vaan heti takaisin makroon.
+                Debug.Log("[RunController] Rest-tile → takaisin makrofaseen.");
+                EnterMacroPhase();
+                break;
+
+            case MacroEventType.RandomEvent:
+                // TODO: random event -paneeli. Nyt placeholder.
+                Debug.Log("[RunController] RandomEvent-tile ei vielä toteutettu → takaisin makroon.");
+                EnterMacroPhase();
+                break;
+
+            case MacroEventType.Boss:
+                // Toistaiseksi sama kuin Battle, myöhemmin erillinen boss encounter
+                Debug.Log("[RunController] Boss-tile → StartNewEncounter (placeholder).");
+                StartNewEncounter();
+                break;
+
+            case MacroEventType.None:
+            default:
+                Debug.Log("[RunController] Tyhjä macro-tile → hyppää suoraan seuraavaan makrofaseen.");
+                EnterMacroPhase();
+                break;
+        }
+    }
+
+    // ---------- SLOTIT ----------
 
     private void EnsureSlotsOnce(int count)
     {
@@ -80,7 +302,6 @@ public sealed class RunController : MonoBehaviour
         Debug.Log($"[RunController] loadoutSlots[{pd.loadoutSlots.Count}] = [{string.Join(",", pd.loadoutSlots.ConvertAll(S))}]");
     }
 
-
     private void TeardownPrevious()
     {
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
@@ -93,44 +314,41 @@ public sealed class RunController : MonoBehaviour
         }
     }
 
-    // ---------- PELI → KAUPPA ----------
+    // ---------- PELI → MACRO ----------
+
     private void OnGameEnded(GameEndInfo info)
     {
-        // Pelaajan nappulat on valkoisia → white = pelaaja
         bool playerWon = info.WinnerColor == "white";
 
         if (playerWon)
         {
-            // 0) Palkinto vain voitosta
             var reward = 10;
             PlayerService.Instance.AddCoins(reward);
 
-            // 1) Siivoa ja piilota lauta
             if (boardView != null)
             {
                 boardView.Teardown(destroySelfGO: false);
                 boardView.gameObject.SetActive(false);
+                boardView.enabled = false;
             }
 
-            // 2) Estä mahdolliset dragit
-            var drag = FindObjectOfType<DragController>();
-            if (drag != null) { drag.StopAllCoroutines(); drag.enabled = false; }
+            // HUOM: ei kosketa DragControlleriin
 
-            // 3) Avaa shop normaaliin tapaan
-            OpenShop();
+            EnterMacroPhase();
         }
         else
         {
-            // Pelaaja hävisi → koko runi nollataan
             Debug.Log("[Run] Player lost → hard reset run + restart");
             ResetRunAndRestart();
         }
     }
 
-
+    // ---------- SHOP ----------
 
     private void OpenShop()
     {
+        Debug.Log($"[OpenShop] Open shop with macroShopTier={_pendingShopTier}");
+
         // 0) Estä pelilaudan input
         if (boardView != null) boardView.enabled = false;
         var drag = FindObjectOfType<DragController>();
@@ -143,7 +361,6 @@ public sealed class RunController : MonoBehaviour
         var pd = PlayerService.Instance.Data;
         Debug.Log($"[ShopOpen] slots={pd.loadoutSlots?.Count ?? 0} sample=[{string.Join(",", (pd.loadoutSlots ?? new System.Collections.Generic.List<string>()).GetRange(0, System.Math.Min(8, pd.loadoutSlots?.Count ?? 0)))}]");
 
-
         // 3) Loadout-grid pystyyn
         if (loadoutView != null)
         {
@@ -151,7 +368,7 @@ public sealed class RunController : MonoBehaviour
             loadoutView.RefreshAll();
         }
 
-        // 4) Resolvaa shop-näkymä nimenomaan panelin alta (ettei löydy väärä instanssi)
+        // 4) Resolvaa shop-näkymä
         ShopGridView shop = shopView;
         if (shop == null)
         {
@@ -175,39 +392,45 @@ public sealed class RunController : MonoBehaviour
         if (svc == null) { Debug.LogError("[OpenShop] PlayerService puuttuu."); return; }
         if (pool == null) { Debug.LogError("[OpenShop] ShopPoolSO (defaultShopPool) puuttuu. Aseta Inspectorissa."); return; }
 
-        // 7) Anna depsit ENSIN (Shopin Awake/OnEnable ei tarvitse olla ajettu)
+        // 7) Anna depsit ENSIN
         shop.Setup(svc, pool);
 
-        // 8) Aktivoi UI vasta nyt (Setup tehty → OnEnable/Refresh voi toimia)
+        // 8) Aktivoi UI
         if (shopPanel != null) shopPanel.SetActive(true);
-
-        // 9) (Valinnainen) Refresh — Setup kutsuu jo RebuildFromPool(), joten tämä on ylimääräinen
-        // shop.RebuildFromPool();
     }
 
-
-
-    // UI-nappi: “Jatka”
+    // UI-nappi: “Jatka” kaupan jälkeen
     public void ContinueFromShop()
     {
-        // 1) Kompaktoi sloteista meta-listaksi ja tallenna
         var ps = PlayerService.Instance;
-        ps.Data.loadout = LoadoutModel.Compact(ps.Data.loadoutSlots); // synkkaa meta sloteista
-        ps.Save();
+        if (ps != null)
+        {
+            // 1) Kompaktoi sloteista meta-listaksi ja tallenna
+            ps.Data.loadout = LoadoutModel.Compact(ps.Data.loadoutSlots);
+            ps.Save();
+        }
 
         // 2) Sulje shop
         if (shopPanel != null) shopPanel.SetActive(false);
 
-        // 3) Uusi Encounter (slotMap/override käyttää nyt päivitettyä dataa)
-        StartNewEncounter();
+        // 3) Takaisin makrofaseen jos makrot käytössä, muuten suoraan uuteen matsiin
+        if (macroMap != null && macroView != null)
+        {
+            EnterMacroPhase();
+        }
+        else
+        {
+            StartNewEncounter();
+        }
     }
 
     // ---------- ENCOUNTERIN RAKENNUS ----------
+
     private void StartNewEncounter()
     {
+        Debug.Log($"[RunController] StartNewEncounter with macroDifficulty={_pendingBattleDifficulty}");
+        TeardownPrevious();
 
-        TeardownPrevious(); // NEW
-        // Irrota vanhan pelin kuuntelijat
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
 
         // 1) Luo GameState (template → custom geom, muuten width/height)
@@ -232,14 +455,13 @@ public sealed class RunController : MonoBehaviour
         }
         else
         {
-            EnsureSlotsOnce(16); // ✅ varmistaa PlayerData.loadoutSlots (16 kpl)
+            EnsureSlotsOnce(16);
             var pd = PlayerService.Instance.Data;
             Debug.Log("[Run] loadoutSlots: " + string.Join(",", pd.loadoutSlots.Select(x => string.IsNullOrEmpty(x) ? "-" : x)));
 
             var pdata = PlayerService.Instance.Data;
             if (slotMap != null)
             {
-                // ✅ käytä 'spec' eikä 'enemySpec'
                 var spec = enemySpec ?? new EnemySpec { mode = EnemySpec.Mode.Classic };
 
                 enc = LoadoutAssembler.BuildFromPlayerData(
@@ -259,7 +481,6 @@ public sealed class RunController : MonoBehaviour
             if (drag != null) drag.enabled = true;
         }
 
-        // ✅ Lukitse suhteellinen rankkikartta ja mustan sotilasrivi
         enc.relativeRanks = true;
         enc.fillBlackPawnsAtY = true;
         enc.blackPawnsY = 1; // 8x8: absY = 7 - 1 = 6
@@ -269,7 +490,7 @@ public sealed class RunController : MonoBehaviour
 
         // 4) Piirto & input
         if (boardView == null)
-            boardView = FindObjectOfType<BoardView>(true); // etsi myös inaktiivisista
+            boardView = FindObjectOfType<BoardView>(true);
 
         if (boardView != null)
         {
@@ -297,7 +518,6 @@ public sealed class RunController : MonoBehaviour
         _rules = new DefRegistryRulesResolver(map);
     }
 
-    // Viimeinen hätävara jos kumpaakaan lähdettä ei ole määritetty
     private EncounterSO BuildMinimalFallbackEncounter()
     {
         var e = ScriptableObject.CreateInstance<EncounterSO>();
@@ -338,14 +558,28 @@ public sealed class RunController : MonoBehaviour
     {
         var ps = PlayerService.Instance;
         if (ps != null)
+        {
             ps.ResetRun();
 
-        // Sulje shop-paneli jos se on auki
+            int startIndex = 0;
+            if (macroMap != null)
+            {
+                int startRow = 0;
+                int startCol = macroMap.columns / 2;
+                startIndex = macroMap.GetIndex(startRow, startCol);
+            }
+
+            ps.Data.macroIndex = startIndex;
+            ps.Save();
+        }
+
         if (shopPanel != null)
             shopPanel.SetActive(false);
 
-        // Käynnistä uusi peli puhtaalta pöydältä
-        StartNewEncounter();
+        if (macroMap != null && macroView != null)
+            StartRun();
+        else
+            StartNewEncounter();
     }
 
 }

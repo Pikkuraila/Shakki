@@ -14,7 +14,6 @@ public sealed class UIDraggablePiece :
     public ShopGridView shopView;     // saa olla null
     public static event System.Action AnyDragEnded;
 
-
     public DragPayloadKind payloadKind = DragPayloadKind.Piece;
     public string payloadId; // piece.typeName / powerup.id / item.id
 
@@ -22,6 +21,10 @@ public sealed class UIDraggablePiece :
 
     [Header("Drag Layer (Canvas child)")]
     public RectTransform dragLayer;      // jätä tyhjäksi → luodaan/runtime
+
+    [Header("Behavior")]
+    public bool useDragLayer = true; // Shop/loadoutille true, macroPiece:lle false
+
 
     // --- Yhteinen "drag on/off" lippu ---
     public static bool s_IsDraggingAny;
@@ -32,6 +35,10 @@ public sealed class UIDraggablePiece :
     CanvasGroup _cg;
     LayoutElement _le;
     Transform _originalParent;
+    RectTransform _dragSpace;   // ← missä koordinaatistossa liikutaan
+
+
+
 
     Vector2 _frozenSize;
     bool _dragging;
@@ -89,7 +96,12 @@ public sealed class UIDraggablePiece :
     // ----------------------------------------------------
     public void OnBeginDrag(PointerEventData e)
     {
+        Debug.Log($"[Drag] BeginDrag for {name}, parentBefore={transform.parent.name}");
+
+
         if (_dragging) return;
+
+        Debug.Log($"[UIDraggablePiece] OnBeginDrag {name}, useDragLayer={useDragLayer}, parent={transform.parent?.name}");
 
         // Freeze koko: otetaan vanhemman solun koko, muuten ikonista
         var parentRT = transform.parent as RectTransform;
@@ -103,9 +115,28 @@ public sealed class UIDraggablePiece :
         _rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _frozenSize.x);
         _rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _frozenSize.y);
 
-        // Hae/tee dragLayer (Canvasin lapsi, koko ruutu)
-        if (dragLayer == null)
+        // varmistetaan, että itse ikoni on näkyvä
+        if (_cg != null)
         {
+            _cg.alpha = 1f;
+            _cg.ignoreParentGroups = true;
+            _cg.blocksRaycasts = false;  // vedettäessä ei blokkaa droppia
+        }
+        if (_img != null)
+        {
+            _img.enabled = true;
+            _img.raycastTarget = false;  // slotit saavat raycastit
+        }
+
+        _originalParent = transform.parent;
+
+        Debug.Log($"[Drag] ParentAfter = {transform.parent.name}");
+
+
+        // Selvitetään missä koordinaatistossa liikutaan
+        if (useDragLayer)
+        {
+            // SHOP / LOADOUT: käytetään erillistä DragLayeria canvasissa
             var canvas = GetComponentInParent<Canvas>();
             if (canvas != null)
             {
@@ -120,42 +151,56 @@ public sealed class UIDraggablePiece :
                     found.offsetMin = Vector2.zero;
                     found.offsetMax = Vector2.zero;
                 }
+
+                var layerCg = found.GetComponent<CanvasGroup>();
+                if (layerCg == null) layerCg = found.gameObject.AddComponent<CanvasGroup>();
+                layerCg.alpha = 1f;
+                layerCg.interactable = false;
+                layerCg.blocksRaycasts = false;
+
                 dragLayer = found;
+                _dragSpace = dragLayer;
+
+                transform.SetParent(dragLayer, worldPositionStays: false);
+                _rt.SetAsLastSibling();
+                Debug.Log($"[UIDraggablePiece] {name} parent → DragLayer ({dragLayer.name})");
+            }
+            else
+            {
+                // fallback: pysytään parentissa
+                _dragSpace = parentRT;
+                Debug.LogWarning($"[UIDraggablePiece] {name} no Canvas, using parent rect");
             }
         }
-
-        _originalParent = transform.parent;
-        transform.SetParent(dragLayer, worldPositionStays: false);
-        _rt.SetAsLastSibling();
-
-        // Vedon aikana ei blokata raycasteja
-        _cg.blocksRaycasts = false;
-        if (_img) _img.raycastTarget = false;
+        else
+        {
+            // MACRO: EI vaihdeta parentia, liikutaan vain parentin rectissä
+            _dragSpace = parentRT;
+            Debug.Log($"[UIDraggablePiece] {name} useDragLayer=FALSE, dragSpace={_dragSpace?.name}");
+        }
 
         // Aseta aloituspaikka
-        if (dragLayer != null)
+        if (_dragSpace != null)
         {
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    dragLayer, e.position, e.pressEventCamera, out var local))
+                    _dragSpace, e.position, e.pressEventCamera, out var local))
             {
                 _rt.anchoredPosition = local;
             }
         }
 
-        // vedettävässä ikonissa
-        var img = GetComponent<UnityEngine.UI.Image>();
-        var cg = GetComponent<CanvasGroup>();
-        if (cg != null) cg.blocksRaycasts = false; // ettei slotit “menetä” droppia
-
         _dragging = true;
         s_IsDraggingAny = true;
     }
 
+
+
     public void OnDrag(PointerEventData e)
     {
-        if (!_dragging || dragLayer == null) return;
+        if (!_dragging || _dragSpace == null) return;
+
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                dragLayer, e.position, e.pressEventCamera, out var local))
+                _dragSpace, e.position, e.pressEventCamera, out var local))
         {
             _rt.anchoredPosition = local;
         }
@@ -199,6 +244,16 @@ public sealed class UIDraggablePiece :
         s_IsDraggingAny = false;
         try { AnyDragEnded?.Invoke(); } catch { }
     }
+
+    public void ForceStopDrag()
+    {
+        _dragging = false;
+        _consumed = false;
+
+        if (_cg != null) _cg.blocksRaycasts = true;
+        if (_img != null) _img.raycastTarget = true;
+    }
+
 
     // --- Nämä on jätetty tyhjiksi, koska muu koodi kutsuu joskus näitä ---
     public void MarkConsumed(int newIndex)

@@ -1,0 +1,21 @@
+fileFormatVersion: 2
+guid: 1b029572d45e9334babc12a7e5c99340
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - board: {instanceID: 0}
+  - backgroundImage: {instanceID: 0}
+  - iconImage: {fileID: 4519606633746510417, guid: 0e48b698046a846439e49ffa8b01d583, type: 3}
+  - pieceAnchor: {instanceID: 0}
+  - battleIcon: {fileID: -145410941488851383, guid: 66d854a513311834ab38454cd2241817, type: 3}
+  - shopIcon: {fileID: 2718459540574412894, guid: 53db0900fc1a82549848a68f5540d25a, type: 3}
+  - restIcon: {fileID: 9161512556228740923, guid: 2ce2cfcd02521384fb2e3ef02da9400c, type: 3}
+  - randomIcon: {fileID: 3010883747535230558, guid: b756e79dc9eb02b49918b2981fd191dd, type: 3}
+  - bossIcon: {fileID: 7063018652064256622, guid: 31d97b10c37bdbf49af40290690eafc1, type: 3}
+  - defaultIcon: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -13,6 +13,8 @@ MonoImporter:
   - loadoutView: {instanceID: 0}
   - shopView: {instanceID: 0}
   - defaultShopPool: {fileID: 11400000, guid: 2a9a13ae76ee3dc4fb55b453ea1ede8b, type: 2}
+  - macroMap: {fileID: 11400000, guid: b9df6cff972a5c74f99b099a3f7c42dd, type: 2}
+  - macroView: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

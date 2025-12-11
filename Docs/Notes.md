@@ -36,7 +36,7 @@ DUMPPAA KAIKKI TÄNNE
 
 ## 🔹 Yhdistelmänappuja.
 - [X] Empress - heppa + torni.
-- [X] Amazon - kuningatar + torni + lähetti. Todella vahva.
+- [X] Amazon "Assassin" - kuningatar + heppa = Todella vahva.
 - [X] Archbishop - heppa + lähetti.
 
 ## 🔹 - Sotilas
@@ -68,10 +68,11 @@ DUMPPAA KAIKKI TÄNNE
 
 ## 🔹 Boss encounters
 
-- [ ] Gothamchess joka syöttää vitusti torneja suihin.
-- [ ] "porvari" joka vihaa sotilaita
-- [ ] Neukkuteemainen jolla on paljon sotilaita ja ne jakaa abilityt. Alussa ei abilityja mut saa niitä paljon laudalta jos ei pidä kurissa.
-- [ ] 
+- [ ] Gothamchess, lähinnä torneja, pelaa agressiivisesti ja uhrailee.
+- [ ] Kulta kuningas, joka vihaa sotilaita
+- [ ] Amalgam jolla on paljon sotilaita ja ne jakaa abilityt.
+- [ ] Trickster jonka kaikki nappulat ei oo todellisia ja voit koittaa arvata niitä.
+
 
 ## 🔹 Powerups
 

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: b7d396d0a16122a46b718ae16bfb8b7f
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - map: {fileID: 11400000, guid: b9df6cff972a5c74f99b099a3f7c42dd, type: 2}
+  - cellsRoot: {fileID: 9193420349685283374, guid: 32398b9ae74a0874a9a4809809da4981, type: 3}
+  - cellPrefab: {fileID: 3154996701494512019, guid: ad4246ac9dd905e43b7b4bc882d37741, type: 3}
+  - macroPiece: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
