@@ -20,7 +20,7 @@ Tavoite: pitää kehitystyö jäsenneltynä ja helposti päivitettävänä Gitin
 | **v0.104 - Kauppa skenen pohja ja kaupassa voi vaihdella nappuloiden paikkoja | ✅ Valmis  |
 | **v0.105 – Kauppa & Meta** kaupasta ostettavat nappulat | ✅ Valmis |
 | **v0.2 – Kauppa & Meta** | ShopScene, PlayerData, coin-järjestelmä. | ✅ Valmis |
-| **v0.3 – Kampanja / Macropeli** | 3×20 makrolauta, boss-vuorot, kaupat ja eventit. | 🕓 Suunnitteilla |
+| **v0.3 – Kampanja / Macropeli** | 3×20 makrolauta, boss-vuorot, kaupat ja eventit. |  ✅ Valmis  |
 | **v0.4 – Fog of War & Modifiers** | IBattleModifier-järjestelmä, visibility-palvelu. | ⏳ Suunnitteilla |
 | **v0.5 – Progression & Tallennus** | PlayerData persistenssi + DifficultyCurve. | ⏳ Suunnitteilla |
 | **v0.6 – Telemetria & Balanssi** | Lokitus + Balance Dashboard. | ⏳ Suunnitteilla |
@@ -40,7 +40,7 @@ TO DO:
 
 
 
-- [ ] Tee `CampaignState` + `EncounterSO`-malli.
+- [X] Tee `CampaignState` + `EncounterSO`-malli.
 - [ ] Tee `IBattleModifier` + pari esimerkkiä (Fog, Heal).
 - [ ] Toteuta `RuleSetSO` + editor-validointi.
 - [ ] Rakenna `BattleSim`-editorityökalu.
