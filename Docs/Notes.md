@@ -6,13 +6,11 @@ DUMPPAA KAIKKI TÄNNE
 
 ## 🔹 Ideat
 
-- [ ] “Shakkimiekka” – nappula joka yhdistää hevosen ja tornin (hyppää + jatkaa). onks täs mitää järkeä? aichat illuusio hä?
 - [ ] Vihollisilla voisi olla “AI-persoonat” (KnightLover, BishopHater jne.).
 - [ ] Jokaisella bossilla voisi olla erikoisavausteksti (“My pawns bleed for me.”). 
 - [ ] Bossit käyttäis samaa dialogisysteemiä ku Greco. Puhuis myös samalla tavalla.
 - [ ] Jos tulee käytettäviä itemeitä kuten freeze ja jump spell ni ne käytetään aina ennen siirtoa.
 
-- [ ] Sotilaat lähtökohtasesti jakaa kuninkaan abilityt. synergiat solttujen ja upseerien välillä fokukseks?
 - [ ] Spessu kauppa jossa voi lihamyllätä nappuloitaan yhteen jotta niistä tulee uusia.
 - [ ] alustava value systeemi kaikille nappuloille.
 	Solttu - 1
