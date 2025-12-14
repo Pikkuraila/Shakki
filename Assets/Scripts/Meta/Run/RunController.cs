@@ -561,6 +561,19 @@ public sealed class RunController : MonoBehaviour
         {
             ps.ResetRun();
 
+            // --- RESETOI LOADOUT ---
+            // 1) Perus-loadout (vaihda tähän sun haluama startti)
+            ps.Data.loadout = new List<LoadoutEntry>
+            {
+            new LoadoutEntry { pieceId = "King", count = 1 },
+            new LoadoutEntry { pieceId = "Pawn", count = 2 },
+            new LoadoutEntry { pieceId = "Rook", count = 1 },
+            };
+
+            // 2) Rakenna slotit tyhjillä paikoilla (16 slottia, tyhjä = "")
+            ps.Data.loadoutSlots = LoadoutModel.Expand(ps.Data.loadout, 16, "");
+
+            // --- Resetoi macroIndex kuten ennen ---
             int startIndex = 0;
             if (macroMap != null)
             {
