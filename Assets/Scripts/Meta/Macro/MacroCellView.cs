@@ -28,6 +28,7 @@ public sealed class MacroCellView : MonoBehaviour
     public Sprite randomIcon;
     public Sprite bossIcon;
     public Sprite defaultIcon;
+    public Sprite alchemistIcon;
 
     public void Setup(MacroBoardView board, int index)
     {

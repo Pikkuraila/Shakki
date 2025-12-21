@@ -9,4 +9,10 @@ namespace Shakki.Core
     {
         IEnumerable<IMoveRule> GetRulesFor(string typeName);
     }
+
+    public interface IRuntimeRulesRegistry
+    {
+        void RegisterOrReplace(PieceDefSO def);
+    }
+
 }

@@ -62,6 +62,10 @@ public class BoardView : MonoBehaviour
     public float cameraPaddingTiles = 0.5f; // extra “tyhjää” reunoille
 
 
+    [Header("Catalog (runtime defs fallback)")]
+    [SerializeField] private GameCatalogSO catalog;
+    public void SetCatalog(GameCatalogSO cat) => catalog = cat;
+
     // Välimuisti, jotta voidaan siivota/päivittää laattoja
     readonly Dictionary<(int x, int y), GameObject> _tiles = new();
 
@@ -431,11 +435,26 @@ public class BoardView : MonoBehaviour
             var p = _state.Get(c);
             if (p == null) continue;
 
-            if (!_defByType.TryGetValue(p.TypeName, out var def))
+            if (!_defByType.TryGetValue(p.TypeName, out var def) || def == null)
             {
-                Debug.LogWarning($"Puuttuu PieceDefSO tyypille {p.TypeName}");
-                continue;
+                // Fallback: hae myös catalogista (sis. runtime registry)
+                if (catalog != null)
+                {
+                    def = catalog.GetPieceById(p.TypeName);
+                    if (def != null)
+                    {
+                        _defByType[p.TypeName] = def;
+                        Debug.Log($"[BoardView] Fallback-registered def from catalog: {p.TypeName}");
+                    }
+                }
+
+                if (def == null)
+                {
+                    Debug.LogWarning($"Puuttuu PieceDefSO tyypille {p.TypeName}");
+                    continue;
+                }
             }
+
 
             var prefab = def.viewPrefabOverride != null ? def.viewPrefabOverride : PiecePrefab;
             var go = Instantiate(prefab, new Vector3(c.X, c.Y, -1f), Quaternion.identity, PiecesParent);
@@ -493,19 +512,28 @@ public class BoardView : MonoBehaviour
         var ctx = new RuleContext(s, from, _rules);
 
         var me = s.Get(from);
-        if (me == null) yield break;
+        if (me == null)
+            yield break;
+
+        int ruleCount = 0;
+        int moveCount = 0;
 
         // Generoi siirrot suoraan resolverilta (JokerRule pääsee mukaan)
         foreach (var rule in _rules.GetRulesFor(me.TypeName))
         {
+            if (rule == null) continue;
+            ruleCount++;
+
             foreach (var m in rule.Generate(ctx))
             {
-                // Jos sinulla on erillinen laillisuustarkistus, laita se tähän:
-                // if (s.IsLegalMove(m)) yield return m;
+                moveCount++;
                 yield return m;
             }
         }
+
+        Debug.Log($"[Moves] type={me.TypeName} rules={ruleCount} moves={moveCount}");
     }
+
 
     public void OnTileClicked(int x, int y)
     {
@@ -794,6 +822,16 @@ public class BoardView : MonoBehaviour
     Transform PiecesParent => piecesRoot != null ? piecesRoot : transform;
     Transform TilesParent => tilesRoot != null ? tilesRoot : transform;
     Transform HLParent => highlightsRoot != null ? highlightsRoot : transform;
+
+
+
+
+    public void RegisterRuntimeDef(PieceDefSO def)
+    {
+        if (def == null || string.IsNullOrEmpty(def.typeName)) return;
+        _defByType[def.typeName] = def;
+        Debug.Log($"[BoardView] Registered runtime def: {def.typeName}");
+    }
 
 }
 

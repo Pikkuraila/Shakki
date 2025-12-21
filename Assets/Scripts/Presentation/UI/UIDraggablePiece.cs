@@ -26,6 +26,9 @@ public sealed class UIDraggablePiece :
     public bool useDragLayer = true; // Shop/loadoutille true, macroPiece:lle false
 
 
+    public AlchemistEncounterView alchemistView;
+
+
     // --- Yhteinen "drag on/off" lippu ---
     public static bool s_IsDraggingAny;
 

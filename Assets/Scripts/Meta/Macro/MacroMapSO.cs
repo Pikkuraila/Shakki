@@ -7,7 +7,8 @@ public enum MacroEventType
     Shop,
     Rest,
     RandomEvent,
-    Boss
+    Boss,
+    Alchemist
 }
 
 [System.Serializable]

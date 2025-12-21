@@ -32,6 +32,16 @@ public sealed class RunController : MonoBehaviour
     [Header("Shop Data")]
     [SerializeField] private ShopPoolSO defaultShopPool;
 
+    [Header("Alchemist UI (Canvas)")]
+    [SerializeField] private GameObject alchemistPanel;              // Canvas/Panel (inactive)
+    [SerializeField] private AlchemistEncounterView alchemistView;   // panelin sisältä
+    [SerializeField] private LoadoutGridView alchemistLoadoutView;
+
+
+    [Header("Alchemist Data")]
+    [SerializeField] private PieceDefSO amalgamBaseDef;              // Amalgam.asset (typeName="Amalgam")
+
+
     [Header("Macro")]
     [SerializeField] private MacroMapSO macroMap;
     [SerializeField] private MacroBoardView macroView;
@@ -40,6 +50,9 @@ public sealed class RunController : MonoBehaviour
     [Header("Macro Scaling")]
     [SerializeField] private int baseBattleDifficulty = 1;
     [SerializeField] private int baseShopTier = 1;
+
+
+    public Shakki.Core.IRulesResolver Rules => _rules;
 
     // lasketaan aina kun siirrytään uuteen macro-ruutuun
     private int _pendingBattleDifficulty = 1;
@@ -266,6 +279,10 @@ public sealed class RunController : MonoBehaviour
                 Debug.Log("[RunController] Tyhjä macro-tile → hyppää suoraan seuraavaan makrofaseen.");
                 EnterMacroPhase();
                 break;
+
+            case MacroEventType.Alchemist:
+                OpenAlchemist();
+                break;
         }
     }
 
@@ -424,12 +441,113 @@ public sealed class RunController : MonoBehaviour
         }
     }
 
+
+
+    // Alchemist ui
+
+    private void OpenAlchemist()
+    {
+        Debug.Log("[OpenAlchemist] Open alchemist encounter");
+
+        // 0) Estä pelilaudan input (varmuus)
+        if (boardView != null) boardView.enabled = false;
+        var drag = FindObjectOfType<DragController>();
+        if (drag != null) { drag.StopAllCoroutines(); drag.enabled = false; }
+
+        // 1) Täytä slotit kerran jos tyhjät
+        EnsureSlotsOnce(Slots);
+
+        // 2) VALITSE alchemist-loadout view (vaihtoehto A)
+        var lv = alchemistLoadoutView != null ? alchemistLoadoutView : null;
+        if (lv == null)
+        {
+            Debug.LogError("[OpenAlchemist] alchemistLoadoutView puuttuu (inspector).");
+            return;
+        }
+
+        // 3) Resolvaa alchemistView
+        var view = alchemistView;
+        if (view == null)
+        {
+            if (alchemistPanel != null)
+                view = alchemistPanel.GetComponentInChildren<AlchemistEncounterView>(true);
+            if (view == null)
+                view = FindObjectOfType<AlchemistEncounterView>(true);
+        }
+
+        if (view == null) { Debug.LogError("[OpenAlchemist] AlchemistEncounterView puuttuu."); return; }
+        if (catalog == null) { Debug.LogError("[OpenAlchemist] GameCatalogSO puuttuu RunControllerista."); return; }
+        if (amalgamBaseDef == null) { Debug.LogError("[OpenAlchemist] amalgamBaseDef puuttuu (aseta Amalgam.asset)."); return; }
+
+        // 4) Aktivoi UI-paneeli (shop pois OK nyt)
+        if (shopPanel != null) shopPanel.SetActive(false);
+        if (alchemistPanel != null) alchemistPanel.SetActive(true);
+
+        // 5) Loadout-grid pystyyn (MUTTA alchemistLoadoutView:lla)
+        lv.gameObject.SetActive(true);
+        lv.BuildIfNeeded();
+        lv.RefreshAll();
+
+        // 6) Setup view (syötä LV + runtime registry tähän)
+        Shakki.Core.IRuntimeRulesRegistry registry = _rules as Shakki.Core.IRuntimeRulesRegistry;
+        view.Setup(lv, catalog, amalgamBaseDef, registry);
+
+        Debug.Log($"[OpenAlchemist] registry={(registry != null ? "OK" : "NULL")} rulesType={_rules?.GetType().Name}");
+
+
+
+        // 7) Wire loadout-slotit alchemistille (päivitetty helper-signature)
+        WireLoadoutDropSlotsToAlchemist(lv, view);
+
+        Debug.Log($"[OpenAlchemist] Using loadoutView={lv.name}, active={lv.gameObject.activeInHierarchy}");
+        Debug.Log($"dragLayer={(lv.dragLayer != null ? lv.dragLayer.name : "NULL")}");
+
+
+    }
+
+
+    private void WireLoadoutDropSlotsToAlchemist(LoadoutGridView lv, AlchemistEncounterView view)
+    {
+        if (lv == null || view == null) return;
+        lv.BuildIfNeeded();
+        var drops = lv.GetComponentsInChildren<DropSlot>(true);
+        foreach (var d in drops)
+            if (d != null && d.kind == SlotKind.Loadout)
+                d.alchemistView = view;
+    }
+
+
+    public void ContinueFromAlchemist()
+    {
+        var ps = PlayerService.Instance;
+        if (ps != null)
+        {
+            // Kompaktoi ja tallenna
+            ps.Data.loadout = LoadoutModel.Compact(ps.Data.loadoutSlots);
+            ps.Save();
+        }
+
+        // Sulje UI
+        if (alchemistPanel != null) alchemistPanel.SetActive(false);
+
+        // Takaisin makroon / fallback encounteriin
+        if (macroMap != null && macroView != null)
+            EnterMacroPhase();
+        else
+            StartNewEncounter();
+    }
+
+
+
     // ---------- ENCOUNTERIN RAKENNUS ----------
 
     private void StartNewEncounter()
     {
         Debug.Log($"[RunController] StartNewEncounter with macroDifficulty={_pendingBattleDifficulty}");
         TeardownPrevious();
+
+        Debug.Log($"[RunController] StartNewEncounter resolver={_rules?.GetType().Name}");
+
 
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
 
@@ -492,8 +610,11 @@ public sealed class RunController : MonoBehaviour
         if (boardView == null)
             boardView = FindObjectOfType<BoardView>(true);
 
+        
+
         if (boardView != null)
         {
+            boardView.SetCatalog(catalog);
             boardView.gameObject.SetActive(true);
             boardView.Init(_state, _rules, aiMode);
             boardView.enabled = true;
@@ -509,14 +630,23 @@ public sealed class RunController : MonoBehaviour
 
     private void BuildRules()
     {
-        var map = new Dictionary<string, PieceDefSO>(System.StringComparer.OrdinalIgnoreCase);
-        foreach (var def in allPieceDefsForRules)
+        // käytä nimenomaan Core-luokkaa
+        var resolver = new Shakki.Core.DefRegistryRulesResolver();
+
+        if (catalog != null && catalog.pieces != null)
         {
-            if (def == null || string.IsNullOrWhiteSpace(def.typeName)) continue;
-            map[def.typeName] = def;
+            foreach (var def in catalog.pieces)
+            {
+                if (def == null) continue;
+                resolver.RegisterOrReplace(def);
+            }
         }
-        _rules = new DefRegistryRulesResolver(map);
+
+        _rules = resolver;
+
+        Debug.Log($"[RunController] registry check: {_rules is Shakki.Core.IRuntimeRulesRegistry}");
     }
+
 
     private EncounterSO BuildMinimalFallbackEncounter()
     {
@@ -529,25 +659,7 @@ public sealed class RunController : MonoBehaviour
         return e;
     }
 
-    // ---- Rules-resolver sisäänrakennettuna ----
-    private sealed class DefRegistryRulesResolver : IRulesResolver
-    {
-        private readonly Dictionary<string, PieceDefSO> _defs;
-        public DefRegistryRulesResolver(Dictionary<string, PieceDefSO> defs) { _defs = defs; }
-
-        public IEnumerable<IMoveRule> GetRulesFor(string typeName)
-        {
-            if (string.IsNullOrEmpty(typeName) || _defs == null) yield break;
-            if (!_defs.TryGetValue(typeName, out var def) || def == null || def.rules == null) yield break;
-
-            foreach (var so in def.rules)
-            {
-                if (so == null) continue;
-                var rule = so.Build();
-                if (rule != null) yield return rule;
-            }
-        }
-    }
+   
 
     public void OnResetButtonPressed()
     {
@@ -593,6 +705,26 @@ public sealed class RunController : MonoBehaviour
             StartRun();
         else
             StartNewEncounter();
+
+        if (alchemistPanel != null)
+            alchemistPanel.SetActive(false);
     }
+
+    public void RegisterRuntimePieceRules(PieceDefSO runtimeDef)
+    {
+        if (_rules is IRuntimeRulesRegistry reg)
+        {
+            reg.RegisterOrReplace(runtimeDef);
+            Debug.Log($"[RunController] Runtime rules registered for {runtimeDef.typeName}");
+        }
+        else
+        {
+            Debug.LogWarning($"[RunController] _rules doesn't support runtime registry ({_rules?.GetType().FullName}).");
+        }
+    }
+
+
+
+
 
 }

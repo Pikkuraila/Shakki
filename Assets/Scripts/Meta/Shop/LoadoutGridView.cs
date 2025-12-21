@@ -24,7 +24,7 @@ public class LoadoutGridView : MonoBehaviour
 
     [Header("Drag")]
     public RectTransform dragLayer; // <<< aseta Inspectorissa (saman Canvasin child)
-
+  
     readonly List<GameObject> _slots = new(); // UI slot GameObjectit (visuaalinen järjestys)
     bool _built;
     LoadoutService _loadout;
@@ -135,12 +135,23 @@ public class LoadoutGridView : MonoBehaviour
 
             // 4. DropSlot asetukset (dataindeksi jne.)
             var dataIndex = _uiToSlot[ui];
-            var slot = slotGO.GetComponent<DropSlot>() ?? slotGO.AddComponent<DropSlot>();
+
+            // Varmista että slottiin jää tasan yksi DropSlot
+            var dss = slotGO.GetComponents<DropSlot>();
+            for (int k = 1; k < dss.Length; k++)
+                Destroy(dss[k]); // Play Modessa OK
+
+            var slot = dss.Length > 0
+                ? dss[0]
+                : slotGO.AddComponent<DropSlot>();
+
             slot.kind = SlotKind.Loadout;
             slot.index = dataIndex;
             slot.loadoutView = this;
+
         }
 
+        EnsureDragLayer();
 
         _built = true;
         Debug.Log($"[LoadoutGridView] Built {_slots.Count} UI slots. Children in grid: {grid.transform.childCount}");
@@ -341,14 +352,28 @@ public class LoadoutGridView : MonoBehaviour
             tmp.raycastTarget = false;
         }
 
-        // (muista lopuksi lisätä UIDraggablePiece + meta kuten sulla jo oli)
+        // --- FIX: lisää UIDraggablePiece + meta oikein ---
         var drag = iconGO.GetComponent<UIDraggablePiece>() ?? iconGO.AddComponent<UIDraggablePiece>();
-        drag.typeName = type;
+
+        // 1) payload / tunniste (tämä korjaa sun "payloadId=" -tyhjän)
+        drag.payloadId = type;       // <- KRITTIINEN
+        drag.typeName = type;       // jos sulla on vanha kenttä käytössä, pidä myös tämä
+
+        drag.payloadKind = DragPayloadKind.Piece;
+
+        // 2) origin: 
         drag.originKind = SlotKind.Loadout;
-        drag.originIndex = dataIndex;
+        drag.originIndex = uiIndex; 
+
+        // 3) refit
         drag.loadoutView = this;
         drag.dragLayer = this.dragLayer;
+        drag.useDragLayer = (this.dragLayer != null);
+
+        // (valinnainen mutta hyödyllinen debugiin)
+        iconGO.name = $"Icon_{type}_ui{uiIndex}_data{dataIndex}";
     }
+
 
 
 
@@ -381,17 +406,58 @@ public class LoadoutGridView : MonoBehaviour
     {
         if (drag == null || target == null) return;
 
+        // 0) Normalisoi target dataIndex
+        int targetDataIndex = target.index;
+
+        // Jos joku haamu DropSlot index=-1 pääsee läpi, yritä päätellä oikea slotti parentista
+        if (targetDataIndex < 0)
+        {
+            // Jos drop tuli UI-slotin GO:sta, se löytyy _slots-listasta
+            int ui = _slots.IndexOf(target.gameObject);
+            if (ui >= 0) targetDataIndex = UiToDataIndex(ui);
+        }
+
+        // Jos edelleen invalid → älä tee mitään (ja loggaa kerran)
+        if (targetDataIndex < 0 || targetDataIndex >= PlayerService.Instance.Data.loadoutSlots.Count)
+        {
+            Debug.LogWarning($"[LoadoutDrop] Invalid target index={target.index} (resolved={targetDataIndex}) targetGO={target.name}");
+            return;
+        }
+
+        // 1) Tyhjän slotin tarkistus helperiksi
+        bool TargetEmpty() => string.IsNullOrEmpty(GetTypeAt(targetDataIndex));
+
+        // --- X) ALCHEMIST OUTPUT → LOADOUT ---
+        if (drag.originKind == SlotKind.AlchemistOutput && drag.payloadKind == DragPayloadKind.Piece)
+        {
+            if (!string.IsNullOrEmpty(GetTypeAt(target.index)))
+                return;
+
+            if (drag.alchemistView == null)
+            {
+                Debug.LogWarning("[LoadoutDrop] AlchemistOutput dropped but drag.alchemistView is NULL");
+                return;
+            }
+
+            SuppressDataIndexOnce(target.index);
+
+            drag.alchemistView.ConsumeOutputToLoadout(target.index, drag);
+
+            StartCoroutine(CoRefreshAfterDrag());
+            drag.MarkConsumed(target.index);
+            return;
+        }
+
+
         // --- A) SHOP → LOADOUT: PIECE ostetaan tyhjään ruutuun ---
         if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Piece)
         {
-            // vaatii tyhjän slotin
-            if (!string.IsNullOrEmpty(GetTypeAt(target.index)))
+            if (!TargetEmpty())
             {
                 Debug.Log("[LoadoutDrop] target slot not empty, cannot buy.");
                 return;
             }
 
-            // täytyy olla viittaus shoppiin
             var shop = drag.shopView;
             if (shop == null)
             {
@@ -399,25 +465,21 @@ public class LoadoutGridView : MonoBehaviour
                 return;
             }
 
-            // yritä ostaa kaupasta (tämä hoitaa kolikot + slotin tyhjennyksen)
             if (!shop.TryPurchase(drag, out var price, out var reason))
             {
                 Debug.Log($"[LoadoutDrop] purchase failed: {reason}");
-                // halutessasi: drag.SnapBack();
                 return;
             }
 
-            // tästä eteenpäin ostos on maksettu ja itemi poistettu kaupasta
-
-            SuppressDataIndexOnce(target.index);
-            SetTypeAt(target.index, drag.payloadId);   // laita nappula loadout-slottiin
+            SuppressDataIndexOnce(targetDataIndex);
+            SetTypeAt(targetDataIndex, drag.payloadId);
 
             StartCoroutine(CoRefreshAfterDrag());
-            drag.MarkConsumed(target.index);
+            drag.MarkConsumed(targetDataIndex);
             return;
         }
 
-        // B) SHOP → johonkin: POWERUP
+        // --- B) SHOP → POWERUP ---
         if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Powerup)
         {
             var shop = drag.shopView;
@@ -433,47 +495,39 @@ public class LoadoutGridView : MonoBehaviour
                 return;
             }
 
-            // Tästä eteenpäin powerup on maksettu ja poistettu kaupasta
-
-            // Esimerkki: lisää pelaajalle powerup-stackiin
-            var ps = PlayerService.Instance;
-            ps.AddPowerup(drag.payloadId, 1);
-
-            // Jos powerup on slottikohtainen, voit myös:
-            //   ps.Data.slotPowerups[target.index].Add(drag.payloadId);
-            //   jne.
+            PlayerService.Instance.AddPowerup(drag.payloadId, 1);
 
             StartCoroutine(CoRefreshAfterDrag());
-            drag.MarkConsumed(target.index);
+            drag.MarkConsumed(targetDataIndex);
             return;
         }
 
-    
-
-        // --- C) SHOP → INVENTORY: ITEM/POWERUP talteen (InventoryGridissä käsitellään) ---
+        // --- C) SHOP → (ei kelpaa loadoutille) ---
         if (drag.originKind == SlotKind.Shop && drag.payloadKind != DragPayloadKind.Piece)
-        {
-            // Jos tiputetaan loadoutille mutta ei kelpaa → älä tee mitään
             return;
-        }
 
-        // --- D) LOADOUT ↔ LOADOUT: swappaus (entinen koodisi) ---
+        // --- D) LOADOUT ↔ LOADOUT swap ---
         if (drag.originKind == SlotKind.Loadout)
         {
-            if (drag.originIndex == target.index) return;
+            int originDataIndex = UiToDataIndex(drag.originIndex);
+            if (originDataIndex < 0 || originDataIndex >= PlayerService.Instance.Data.loadoutSlots.Count)
+                return;
 
-            SuppressDataIndexOnce(drag.originIndex);
+            if (originDataIndex == targetDataIndex) return;
 
-            var a = GetTypeAt(drag.originIndex);
-            var b = GetTypeAt(target.index);
-            SetTypeAt(drag.originIndex, b);
-            SetTypeAt(target.index, a);
+            SuppressDataIndexOnce(originDataIndex);
+
+            var a = GetTypeAt(originDataIndex);
+            var b = GetTypeAt(targetDataIndex);
+            SetTypeAt(originDataIndex, b);
+            SetTypeAt(targetDataIndex, a);
 
             StartCoroutine(CoRefreshAfterDrag());
-            drag.MarkConsumed(target.index);
+            drag.MarkConsumed(targetDataIndex);
             return;
         }
     }
+
 
 
     GameObject CreateFallbackIcon(Transform parent, string label)
@@ -506,4 +560,42 @@ public class LoadoutGridView : MonoBehaviour
         if (cg == null) cg = go.AddComponent<CanvasGroup>();
         return cg;
     }
+
+    private RectTransform EnsureDragLayer()
+    {
+        if (dragLayer != null) return dragLayer;
+
+        var root = GetComponentInParent<Canvas>()?.rootCanvas;
+        if (root == null) return null;
+
+        var existing = root.transform.Find("DragLayer") as RectTransform;
+        if (existing != null)
+        {
+            dragLayer = existing;
+            dragLayer.SetAsLastSibling();
+            return dragLayer;
+        }
+
+        var go = new GameObject("DragLayer", typeof(RectTransform), typeof(CanvasGroup));
+        var rt = go.GetComponent<RectTransform>();
+        rt.SetParent(root.transform, false);
+        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
+        rt.SetAsLastSibling();
+
+        var cg = go.GetComponent<CanvasGroup>();
+        cg.blocksRaycasts = false;
+        cg.interactable = false;
+
+        dragLayer = rt;
+        return dragLayer;
+    }
+
+    public int UiToDataIndex(int uiIndex)
+    {
+        if (_uiToSlot == null || uiIndex < 0 || uiIndex >= _uiToSlot.Length) return uiIndex;
+        return _uiToSlot[uiIndex];
+    }
+
+
 }
