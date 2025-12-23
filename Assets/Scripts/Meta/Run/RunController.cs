@@ -51,8 +51,35 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private int baseBattleDifficulty = 1;
     [SerializeField] private int baseShopTier = 1;
 
+    [SerializeField] private DialogueController dialogue;
+    [SerializeField] private DialoguePackSO hermitRestDialogue;
+
+
+    [SerializeField] private PlayerService playerService;
+
+
+    // ===== Dialogue wrappers =====
+
+    public void TriggerShopFromDialogue()
+    {
+        OpenShop();
+    }
+
+    public void TriggerBattleFromDialogue()
+    {
+        StartNewEncounter();
+    }
+
+    public void TriggerReturnToMacro()
+    {
+        EnterMacroPhase();
+    }
+
 
     public Shakki.Core.IRulesResolver Rules => _rules;
+
+
+
 
     // lasketaan aina kun siirrytään uuteen macro-ruutuun
     private int _pendingBattleDifficulty = 1;
@@ -64,6 +91,12 @@ public sealed class RunController : MonoBehaviour
     private const int Slots = 16;
 
     // ---------- LIFECYCLE ----------
+
+    private void Awake()
+    {
+        if (playerService == null)
+            playerService = PlayerService.Instance;
+    }
 
     private void Start()
     {
@@ -246,6 +279,8 @@ public sealed class RunController : MonoBehaviour
     /// </summary>
     private void OpenEventFor(MacroTileDef tile)
     {
+        playerService?.SetLastMacroEvent(tile.type.ToString());
+
         switch (tile.type)
         {
             case MacroEventType.Battle:
@@ -257,10 +292,19 @@ public sealed class RunController : MonoBehaviour
                 break;
 
             case MacroEventType.Rest:
-                // TODO: tee oma rest-event-UI. Nyt vaan heti takaisin makroon.
-                Debug.Log("[RunController] Rest-tile → takaisin makrofaseen.");
-                EnterMacroPhase();
+                Debug.Log("[RunController] Rest-tile → Hermit dialogue.");
+
+                if (dialogue != null && hermitRestDialogue != null)
+                {
+                    dialogue.StartDialogue(hermitRestDialogue, "Hermit", EnterMacroPhase);
+                }
+                else
+                {
+                    Debug.LogWarning("[RunController] Rest: Dialogue refs missing → fallback EnterMacroPhase().");
+                    EnterMacroPhase();
+                }
                 break;
+
 
             case MacroEventType.RandomEvent:
                 // TODO: random event -paneeli. Nyt placeholder.

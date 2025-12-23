@@ -82,6 +82,85 @@ public sealed class PlayerService : MonoBehaviour
         return true;
     }
 
+    // --- Narrative / NPC state ---
+    public int GetAlignment(string npcId, int defaultValue = 0)
+    {
+        if (string.IsNullOrEmpty(npcId)) return defaultValue;
+        var s = Data.npcStates?.Find(x => x != null && x.npcId == npcId);
+        return s != null ? s.alignment : defaultValue;
+    }
+
+    public void AddAlignment(string npcId, int delta, int min = -100, int max = 100)
+    {
+        if (string.IsNullOrEmpty(npcId) || delta == 0) return;
+
+        if (Data.npcStates == null) Data.npcStates = new List<NpcState>();
+
+        var s = Data.npcStates.Find(x => x != null && x.npcId == npcId);
+        if (s == null)
+        {
+            s = new NpcState { npcId = npcId, alignment = 0, timesMet = 0 };
+            Data.npcStates.Add(s);
+        }
+
+        s.alignment = Mathf.Clamp(s.alignment + delta, min, max);
+
+        OnChanged?.Invoke();
+        Save();
+    }
+
+    public void IncrementTimesMet(string npcId)
+    {
+        if (string.IsNullOrEmpty(npcId)) return;
+
+        if (Data.npcStates == null) Data.npcStates = new List<NpcState>();
+
+        var s = Data.npcStates.Find(x => x != null && x.npcId == npcId);
+        if (s == null)
+        {
+            s = new NpcState { npcId = npcId, alignment = 0, timesMet = 0 };
+            Data.npcStates.Add(s);
+        }
+
+        s.timesMet++;
+
+        OnChanged?.Invoke();
+        Save();
+    }
+
+    public bool HasFlag(string flagId)
+    {
+        if (string.IsNullOrEmpty(flagId)) return false;
+        return Data.storyFlags != null && Data.storyFlags.Contains(flagId);
+    }
+
+    public void SetFlag(string flagId, bool value = true)
+    {
+        if (string.IsNullOrEmpty(flagId)) return;
+        if (Data.storyFlags == null) Data.storyFlags = new List<string>();
+
+        if (value)
+        {
+            if (!Data.storyFlags.Contains(flagId))
+                Data.storyFlags.Add(flagId);
+        }
+        else
+        {
+            Data.storyFlags.Remove(flagId);
+        }
+
+        OnChanged?.Invoke();
+        Save();
+    }
+
+    public void SetLastMacroEvent(string eventId)
+    {
+        Data.lastMacroEvent = eventId;
+        OnChanged?.Invoke();
+        Save();
+    }
+
+
     // --- Pieces ---
     public bool GrantPiece(string pieceId)
     {

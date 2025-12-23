@@ -8,27 +8,12 @@ public sealed class MacroCellView : MonoBehaviour
 
     [Header("Visuals")]
     public Image backgroundImage;
-    public Image iconImage;          // ← UUSI
+    public Image iconImage;
     public Transform pieceAnchor;
 
-    [Header("Colors")]
-    public Color defaultColor = Color.gray;
-    public Color currentColor = Color.white;
-    public Color nextColor = Color.yellow;
-    public Color battleColor = new Color(0.8f, 0.4f, 0.4f);
-    public Color shopColor = new Color(0.4f, 0.8f, 0.4f);
-    public Color restColor = new Color(0.4f, 0.4f, 0.8f);
-    public Color randomColor = new Color(0.8f, 0.8f, 0.4f);
-    public Color bossColor = new Color(0.6f, 0.2f, 0.6f);
-
     [Header("Icons")]
-    public Sprite battleIcon;
-    public Sprite shopIcon;
-    public Sprite restIcon;
-    public Sprite randomIcon;
-    public Sprite bossIcon;
-    public Sprite defaultIcon;
-    public Sprite alchemistIcon;
+    [SerializeField] private MacroEventIconsSO icons;
+    [SerializeField] private Sprite defaultIcon;
 
     public void Setup(MacroBoardView board, int index)
     {
@@ -46,59 +31,18 @@ public sealed class MacroCellView : MonoBehaviour
 
         if (board == null || board.map == null) return;
 
-        int columns = board.map.columns;
+        // ✅ Väritys jätetään tile-graffan/taustan hoidettavaksi:
+        // backgroundImage.color = (pidä nykyinen tai anna prefab/skin hoitaa)
 
-        // --- RUUTUTYYPPIEN PÄÄVÄRI ---
-        Color baseColor = defaultColor;
-
-        switch (tile.type)
-        {
-            case MacroEventType.Battle: baseColor = battleColor; break;
-            case MacroEventType.Shop: baseColor = shopColor; break;
-            case MacroEventType.Rest: baseColor = restColor; break;
-            case MacroEventType.RandomEvent: baseColor = randomColor; break;
-            case MacroEventType.Boss: baseColor = bossColor; break;
-            case MacroEventType.None:
-            default: baseColor = defaultColor; break;
-        }
-
-        int myRow = Index / columns;
-        int myCol = Index % columns;
-
-        int currentRow = currentIndex >= 0 ? currentIndex / columns : -1;
-        int currentCol = currentIndex >= 0 ? currentIndex % columns : -1;
-
-        bool isCurrent = Index == currentIndex;
-
-        bool isNextOption = false;
-        if (currentRow >= 0)
-        {
-            isNextOption =
-                (myRow == currentRow + 1) &&
-                (Mathf.Abs(myCol - currentCol) <= 1);
-        }
-
-        // --- VÄRIKOROSTUS ---
-        if (isCurrent)
-            backgroundImage.color = currentColor;
-        else if (isNextOption)
-            backgroundImage.color = nextColor;
-        else
-            backgroundImage.color = baseColor;
-
-        // --- IKONI ---
         if (iconImage != null)
         {
-            Sprite s = defaultIcon;
+            Sprite s = null;
 
-            switch (tile.type)
-            {
-                case MacroEventType.Battle: s = battleIcon; break;
-                case MacroEventType.Shop: s = shopIcon; break;
-                case MacroEventType.Rest: s = restIcon; break;
-                case MacroEventType.RandomEvent: s = randomIcon; break;
-                case MacroEventType.Boss: s = bossIcon; break;
-            }
+            if (icons != null)
+                s = icons.GetIconOrNull(tile.type);
+
+            if (s == null)
+                s = defaultIcon;
 
             iconImage.sprite = s;
             iconImage.enabled = (s != null);

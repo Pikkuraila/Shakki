@@ -27,9 +27,21 @@ public sealed class PlayerData
 
     public int macroIndex; // nykyinen sijainti makrolaudalla (0–15)
 
+    // --- DIALOGUE / NPC STATE ---
+    public List<NpcState> npcStates = new();    // per-npc alignment & met-count
+    public List<string> storyFlags = new();     // esim. "visited_rest", "hermit_helped"
+    public string lastMacroEvent;               // esim "Rest", "Shop", "Alchemist"
 
 }
 
 [Serializable] public sealed class UpgradeInstance { public string upgradeId; public int level; }
 [Serializable] public sealed class LoadoutEntry { public string pieceId; public int count; }
 [Serializable] public sealed class PowerupStack { public string powerupId; public int count; }
+
+[Serializable]
+public sealed class NpcState
+{
+    public string npcId;
+    public int alignment;   // esim -100..100
+    public int timesMet;
+}
