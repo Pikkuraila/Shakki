@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+
+
 namespace Shakki.Core
 {
     public sealed class GameState

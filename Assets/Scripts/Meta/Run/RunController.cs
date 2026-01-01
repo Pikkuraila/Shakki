@@ -2,6 +2,7 @@
 using UnityEngine;
 using Shakki.Core;
 using System.Linq;
+using Shakki.Meta.Bestiary;
 
 public sealed class RunController : MonoBehaviour
 {
@@ -58,6 +59,14 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private PlayerService playerService;
 
 
+    [Header("Bestiary")]
+    [SerializeField] private BestiaryProgressionRulesSO bestiaryRules; // luo asset inspectorista
+    [SerializeField] private string enemyOwnerForBestiary = "black";
+
+    private BestiaryService _bestiary;
+    private BestiaryMatchHooks _bestiaryHooks;
+
+
     // ===== Dialogue wrappers =====
 
     public void TriggerShopFromDialogue()
@@ -96,7 +105,15 @@ public sealed class RunController : MonoBehaviour
     {
         if (playerService == null)
             playerService = PlayerService.Instance;
+
+        // Bestiary init (once)
+        if (_bestiary == null && bestiaryRules != null)
+        {
+            _bestiary = new BestiaryService(bestiaryRules, new PlayerPrefsBestiaryStore());
+            _bestiaryHooks = new BestiaryMatchHooks(_bestiary, enemyOwnerForBestiary);
+        }
     }
+
 
     private void Start()
     {
@@ -365,6 +382,10 @@ public sealed class RunController : MonoBehaviour
 
     private void TeardownPrevious()
     {
+        // Bestiary: detach from old GameState
+        if (_bestiaryHooks != null)
+            _bestiaryHooks.Detach();
+
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
 
         if (boardView != null)
@@ -650,6 +671,13 @@ public sealed class RunController : MonoBehaviour
         // 3) Sijoittele nappulat
         EncounterLoader.Apply(_state, enc, catalog);
 
+        // --- Bestiary hook: attach to this encounter + scan initial seen (individuals) ---
+        if (_bestiaryHooks != null)
+        {
+            _bestiaryHooks.Attach(_state);
+            _bestiaryHooks.ScanInitialSeen();  // seen = individuals on board at start
+        }
+
         // 4) Piirto & input
         if (boardView == null)
             boardView = FindObjectOfType<BoardView>(true);
@@ -736,6 +764,14 @@ public sealed class RunController : MonoBehaviour
                 int startRow = 0;
                 int startCol = macroMap.columns / 2;
                 startIndex = macroMap.GetIndex(startRow, startCol);
+            }
+
+            // --- RESET BESTIARY (for testing) --- TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST
+            if (_bestiaryHooks != null) _bestiaryHooks.Detach();
+            if (_bestiary != null)
+            {
+                _bestiary.HardReset();
+                Debug.Log("[Bestiary] Hard reset done.");
             }
 
             ps.Data.macroIndex = startIndex;
