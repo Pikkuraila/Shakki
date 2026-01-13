@@ -5,6 +5,13 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Shakki/Encounter", fileName = "Encounter")]
 public sealed class EncounterSO : ScriptableObject
 {
+
+    // EncounterSO.cs
+    [Header("Win condition")]
+    public bool requireWhiteKing = true;
+    public bool requireBlackKing = true;
+
+
     [Serializable]
     public struct Spawn
     {

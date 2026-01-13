@@ -43,6 +43,33 @@ namespace Shakki.Core
         public void Set(Coord c, Piece? p) => Board.Set(c, p);
         public IEnumerable<Coord> AllCoords() => Board.AllCoords();
 
+        public bool RequireWhiteKing { get; set; } = true;
+        public bool RequireBlackKing { get; set; } = true;
+
+        public bool HasKingOnBoard(string color)
+        {
+            foreach (var c in AllCoords())
+            {
+                var p = Get(c);
+                if (p != null && p.Owner == color && p.TypeName == "King")
+                    return true;
+            }
+            return false;
+        }
+
+
+
+        private bool HasAnyPieces(string color)
+        {
+            foreach (var c in AllCoords())
+            {
+                var p = Get(c);
+                if (p != null && p.Owner == color) return true;
+            }
+            return false;
+        }
+
+
         public bool ApplyMove(Move m, IRulesResolver rules)
         {
             if (IsGameOver) return false;         // UUSI: ei siirtoja pelin jälkeen
@@ -133,11 +160,17 @@ namespace Shakki.Core
             // 1) Nopea haara: jos kohteena oli kuningas, peli loppuu heti
             if (target != null && target.TypeName == "King")
             {
-                IsGameOver = true;
-                WinnerColor = piece.Owner;
-                LoserColor = target.Owner;
-                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor, EndReason.KingCaptured, MoveHistory.Count));
-                return true;                       // HUOM: ei vuoronvaihtoa, ei OnTurnChanged
+                bool targetRequiresKing = (target.Owner == "white") ? RequireWhiteKing : RequireBlackKing;
+
+                if (targetRequiresKing)
+                {
+                    IsGameOver = true;
+                    WinnerColor = piece.Owner;
+                    LoserColor = target.Owner;
+                    OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor, EndReason.KingCaptured, MoveHistory.Count));
+                    return true;
+                }
+                // else: kingin saa syödä, mutta se ei päätä peliä (annihilation ratkaisee)
             }
 
             // 2) Varmistus: jos jokin erikoissääntö olisi poistanut kuninkaan muualla, skannaa
@@ -250,30 +283,39 @@ namespace Shakki.Core
         {
             if (IsGameOver) return true;
 
-            bool whiteHas = HasKing("white");
-            bool blackHas = HasKing("black");
-            if (whiteHas && blackHas) return false;
+            bool whiteAlive = RequireWhiteKing ? HasKing("white") : HasAnyPieces("white");
+            bool blackAlive = RequireBlackKing ? HasKing("black") : HasAnyPieces("black");
+
+            if (whiteAlive && blackAlive) return false;
 
             IsGameOver = true;
 
-            if (whiteHas && !blackHas)
+            if (whiteAlive && !blackAlive)
             {
                 WinnerColor = "white"; LoserColor = "black";
-                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor, EndReason.KingCaptured, MoveHistory.Count));
+                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor,
+                    RequireBlackKing ? EndReason.KingCaptured : EndReason.Annihilation,
+                    MoveHistory.Count));
             }
-            else if (!whiteHas && blackHas)
+            else if (!whiteAlive && blackAlive)
             {
                 WinnerColor = "black"; LoserColor = "white";
-                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor, EndReason.KingCaptured, MoveHistory.Count));
+                OnGameEnded?.Invoke(new GameEndInfo(WinnerColor, LoserColor,
+                    RequireWhiteKing ? EndReason.KingCaptured : EndReason.Annihilation,
+                    MoveHistory.Count));
             }
             else
             {
                 WinnerColor = null; LoserColor = null;
                 OnGameEnded?.Invoke(new GameEndInfo(null, null, EndReason.DoubleKO, MoveHistory.Count));
             }
+
             return true;
         }
 
 
+
     }
+
+    
 }

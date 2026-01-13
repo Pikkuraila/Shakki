@@ -1,6 +1,11 @@
 namespace Shakki.Core
 {
-    public enum EndReason { KingCaptured, DoubleKO }
+    public enum EndReason
+    {
+        KingCaptured,
+        DoubleKO,
+        Annihilation
+    }
 
     public readonly struct GameEndInfo
     {

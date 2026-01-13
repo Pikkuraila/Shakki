@@ -760,6 +760,9 @@ public sealed class RunController : MonoBehaviour
         // 2) Valitse / rakenna Encounter
         EncounterSO enc = null;
 
+        
+
+
         // --- A) Macro-eventin antama ENEMY SPEC (budjetti / slots) ---
         if (_pendingEnemySpecOverride != null)
         {
@@ -781,6 +784,8 @@ public sealed class RunController : MonoBehaviour
                     implicitKingId: "King",
                     totalSlots: 16
                 );
+                // ✅ BUDGET-BATTLE = KINGLESS (annihilation)
+                enc.requireBlackKing = false;
 
                 Debug.Log($"[RunController] Built encounter from player loadout + pending EnemySpec DROP (mode={spec.mode}).");
             }
@@ -789,6 +794,7 @@ public sealed class RunController : MonoBehaviour
                 enc = BuildMinimalFallbackEncounter();
                 Debug.LogWarning("[RunController] slotMap/playerData missing -> using minimal fallback encounter (pending EnemySpec ignored).");
             }
+
         }
 
 
@@ -810,14 +816,17 @@ public sealed class RunController : MonoBehaviour
                 };
 
                 enc = LoadoutAssembler.BuildFromPlayerDataDrop(
-    pdata,
-    slotMap,
-    spec,
-    boardWidth: _state.Width,
-    boardHeight: _state.Height,
-    implicitKingId: "King",
-    totalSlots: 16
-);
+                    pdata,
+                    slotMap,
+                    spec,
+                    boardWidth: _state.Width,
+                    boardHeight: _state.Height,
+                    implicitKingId: "King",
+                    totalSlots: 16
+                );
+
+                // ✅ Budget-enemy: king ei pakollinen
+                enc.requireBlackKing = false;
 
                 Debug.Log($"[RunController] Built encounter from player loadout + enemy preset '{enemyPreset.name}'.");
             }
@@ -845,14 +854,14 @@ public sealed class RunController : MonoBehaviour
                 var spec = enemySpec ?? new EnemySpec { mode = EnemySpec.Mode.Classic };
 
                 enc = LoadoutAssembler.BuildFromPlayerDataDrop(
-    pdata,
-    slotMap,
-    spec,
-    boardWidth: _state.Width,
-    boardHeight: _state.Height,
-    implicitKingId: "King",
-    totalSlots: 16
-);
+                    pdata,
+                    slotMap,
+                    spec,
+                    boardWidth: _state.Width,
+                    boardHeight: _state.Height,
+                    implicitKingId: "King",
+                    totalSlots: 16
+                );
             }
             else
             {
@@ -865,6 +874,11 @@ public sealed class RunController : MonoBehaviour
             Debug.LogError("[RunController] Encounter build failed -> using minimal fallback.");
             enc = BuildMinimalFallbackEncounter();
         }
+
+        
+
+        Debug.Log($"[RunController] EndRules requireWhiteKing={_state.RequireWhiteKing} requireBlackKing={_state.RequireBlackKing}");
+
 
         // --- YHTEINEN: defaultit / turvallisuus ---
         // SlotMap-pohjaiset encit on käytännössä aina relativeRanks = true.
@@ -879,6 +893,36 @@ public sealed class RunController : MonoBehaviour
 
         // 3) Sijoittele nappulat
         EncounterLoader.Apply(_state, enc, catalog);
+
+        // ✅ DROP-FIX: päätä “king required” vasta spawnin jälkeen.
+        // Sääntö: jos kuningas on laudalla -> sen kaappaus päättää.
+        // Jos kuningasta ei ole -> annihilation.
+        _state.RequireWhiteKing = enc.requireWhiteKing || _state.HasKingOnBoard("white");
+        _state.RequireBlackKing = enc.requireBlackKing || _state.HasKingOnBoard("black");
+
+        Debug.Log($"[RunController] EndRules(post-spawn) requireW={_state.RequireWhiteKing} requireB={_state.RequireBlackKing} " +
+                  $"hasWKing={_state.HasKingOnBoard("white")} hasBKing={_state.HasKingOnBoard("black")}");
+
+
+        int whiteCount = 0, blackCount = 0, whiteKings = 0, blackKings = 0;
+        foreach (var c in _state.AllCoords())
+        {
+            var p = _state.Get(c);
+            if (p == null) continue;
+            if (p.Owner == "white") { whiteCount++; if (p.TypeName == "King") whiteKings++; }
+            if (p.Owner == "black") { blackCount++; if (p.TypeName == "King") blackKings++; }
+        }
+
+        Debug.Log($"[EL] Counts white={whiteCount} (kings={whiteKings}) black={blackCount} (kings={blackKings}) " +
+                  $"requireW={_state.RequireWhiteKing} requireB={_state.RequireBlackKing}");
+
+        // Turvakaide: jos encounter väittää että black king vaaditaan,
+        // mutta sitä ei spawnautunut, vaihda kingless-tilaan.
+        if (_state.RequireBlackKing && !_state.HasKingOnBoard("black"))
+        {
+            Debug.LogWarning("[RunController] requireBlackKing=true but no black King on board -> forcing RequireBlackKing=false (annihilation).");
+            _state.RequireBlackKing = false;
+        }
 
         // --- Bestiary hook ---
         if (_bestiaryHooks != null)
@@ -901,9 +945,9 @@ public sealed class RunController : MonoBehaviour
             boardView.CanRevealEnemyMovesOnHover = (pv) =>
             {
                 if (pv == null || _bestiary == null) return false;
-#if UNITY_EDITOR
+            #if UNITY_EDITOR
             Debug.Log($"[HoverGate] type={pv.TypeLabel} moveKnown={_bestiary.IsMoveKnown(pv.TypeLabel)}");
-#endif
+            #endif
                 return _bestiary.IsMoveKnown(pv.TypeLabel);
             };
 
