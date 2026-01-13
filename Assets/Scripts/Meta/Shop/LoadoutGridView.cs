@@ -1,4 +1,4 @@
-﻿// LoadoutGridView.cs
+﻿// LoadoutGridView.cs (DROP-IN SAFE VERSION)
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,8 +11,8 @@ public class LoadoutGridView : MonoBehaviour
     [Header("Refs")]
     public GridLayoutGroup grid;
     public GameObject slotPrefab;       // sisältää DropSlot
-    public GameObject pieceIconPrefab;  // sisältää PieceIcon / Image
-    public PlayerService playerService; // singleton
+    public GameObject pieceIconPrefab;  // sisältää PieceIcon / Image (ei pakollinen)
+    public PlayerService playerService; // optional: jos tyhjä, fallbackaa singletoniin
     public GameCatalogSO gameCatalog;
     public TMPro.TMP_Text coinsText;
 
@@ -24,7 +24,13 @@ public class LoadoutGridView : MonoBehaviour
 
     [Header("Drag")]
     public RectTransform dragLayer; // <<< aseta Inspectorissa (saman Canvasin child)
-  
+
+    [Header("Drop Rules")]
+    public bool allowLoadoutSwap = true;
+    public bool allowShopDrops = true;
+    public bool allowAlchemistDrops = true;
+    public bool allowPowerupDrops = true;
+
     readonly List<GameObject> _slots = new(); // UI slot GameObjectit (visuaalinen järjestys)
     bool _built;
     LoadoutService _loadout;
@@ -33,8 +39,33 @@ public class LoadoutGridView : MonoBehaviour
     // --- apu: UI-järjestyksen -> data-slotin indeksi ---
     int[] _uiToSlot;
 
+    // Estetään välivälähdys vedon päättyessä:
+    readonly HashSet<int> _suppressDataOnce = new();
+
+    // --- Safe accessors (DROP-IN): käytä bindattua, muuten singleton ---
+    PlayerService PS => playerService != null ? playerService : PlayerService.Instance;
+    PlayerData PD => PS != null ? PS.Data : null;
+
     void OnEnable() { UIDraggablePiece.AnyDragEnded += OnAnyDragEnded; }
     void OnDisable() { UIDraggablePiece.AnyDragEnded -= OnAnyDragEnded; }
+
+    // Optional: voit kutsua tätä hostista (Shop/Macro), mutta ei pakollinen.
+    public void Bind(PlayerService ps, GameCatalogSO catalog, LoadoutService loadout = null)
+    {
+        playerService = ps;
+        gameCatalog = catalog;
+        _loadout = loadout;
+
+        _defByType = gameCatalog != null ? gameCatalog.BuildPieceLookup() : null;
+    }
+
+    public void Unbind()
+    {
+        playerService = null;
+        gameCatalog = null;
+        _loadout = null;
+        _defByType = null;
+    }
 
     void OnAnyDragEnded()
     {
@@ -52,8 +83,6 @@ public class LoadoutGridView : MonoBehaviour
         RefreshAll();                            // final
     }
 
-    // Estetään välivälähdys vedon päättyessä:
-    readonly HashSet<int> _suppressDataOnce = new();
     void SuppressDataIndexOnce(int dataIndex)
     {
         if (dataIndex >= 0) _suppressDataOnce.Add(dataIndex);
@@ -61,8 +90,9 @@ public class LoadoutGridView : MonoBehaviour
 
     void Awake()
     {
-        _defByType = gameCatalog.BuildPieceLookup();
-        // _loadout init jos tarpeen…
+        // Älä kaada jos catalog puuttuu (macro/shop voi bindata myöhemmin)
+        if (gameCatalog != null)
+            _defByType = gameCatalog.BuildPieceLookup();
     }
 
     public void BuildIfNeeded()
@@ -103,11 +133,9 @@ public class LoadoutGridView : MonoBehaviour
         int total = boardWidth * boardHeight;
         for (int ui = 0; ui < total; ui++)
         {
-            // 1. Luo slotti
             var slotGO = Instantiate(slotPrefab, grid.transform);
             _slots.Add(slotGO);
 
-            // 2. Layout-säädöt (kuten sulla jo oli)
             var slotRT = (RectTransform)slotGO.transform;
             slotRT.anchorMin = new Vector2(0, 0);
             slotRT.anchorMax = new Vector2(1, 1);
@@ -118,37 +146,31 @@ public class LoadoutGridView : MonoBehaviour
             slotLE.ignoreLayout = false;
             slotLE.flexibleWidth = 0;
             slotLE.flexibleHeight = 0;
-            slotLE.preferredWidth = grid.cellSize.x;
-            slotLE.preferredHeight = grid.cellSize.y;
+            slotLE.preferredWidth = grid != null ? grid.cellSize.x : 80f;
+            slotLE.preferredHeight = grid != null ? grid.cellSize.y : 80f;
 
-            // 3. Taustakuva (Image + ChessSlotSkin)
             var bg = slotGO.GetComponent<Image>() ?? slotGO.AddComponent<Image>();
-            bg.color = Color.white; // varmista ettei ole haalea
+            bg.color = Color.white;
 
             var skin = slotGO.GetComponent<ChessSlotSkin>();
             if (skin != null)
             {
-                skin.index = ui;              // visuaalinen ruutujärjestys
-                skin.columnsOverride = boardWidth; // tai 0 jos haluat lukea Gridistä
+                skin.index = ui;
+                skin.columnsOverride = boardWidth;
                 skin.Apply();
             }
 
-            // 4. DropSlot asetukset (dataindeksi jne.)
             var dataIndex = _uiToSlot[ui];
 
             // Varmista että slottiin jää tasan yksi DropSlot
             var dss = slotGO.GetComponents<DropSlot>();
             for (int k = 1; k < dss.Length; k++)
-                Destroy(dss[k]); // Play Modessa OK
+                Destroy(dss[k]);
 
-            var slot = dss.Length > 0
-                ? dss[0]
-                : slotGO.AddComponent<DropSlot>();
-
+            var slot = dss.Length > 0 ? dss[0] : slotGO.AddComponent<DropSlot>();
             slot.kind = SlotKind.Loadout;
             slot.index = dataIndex;
             slot.loadoutView = this;
-
         }
 
         EnsureDragLayer();
@@ -156,19 +178,6 @@ public class LoadoutGridView : MonoBehaviour
         _built = true;
         Debug.Log($"[LoadoutGridView] Built {_slots.Count} UI slots. Children in grid: {grid.transform.childCount}");
         RefreshAll();
-    }
-
-    void RefreshAllSkins()
-    {
-        for (int ui = 0; ui < _slots.Count; ui++)
-        {
-            var skin = _slots[ui].GetComponent<ChessSlotSkin>();
-            if (skin != null)
-            {
-                skin.index = ui;
-                skin.Apply();
-            }
-        }
     }
 
     void BuildUiToSlotMapping()
@@ -189,7 +198,7 @@ public class LoadoutGridView : MonoBehaviour
         for (int dataIndex = 0; dataIndex < 16; dataIndex++)
         {
             var c = slotMap.whiteSlotCoords[dataIndex];
-            int y = uiOriginTopLeft ? c.y : (boardHeight - 1 - c.y); // 👈 Y-FLIP
+            int y = uiOriginTopLeft ? c.y : (boardHeight - 1 - c.y); // Y-FLIP
             int uiIndex = y * boardWidth + c.x;
 
             if (uiIndex < 0 || uiIndex >= total)
@@ -203,7 +212,6 @@ public class LoadoutGridView : MonoBehaviour
             _uiToSlot[uiIndex] = dataIndex;
         }
 
-        // täydennä varalta
         for (int ui = 0; ui < total; ui++)
             if (_uiToSlot[ui] == -1) _uiToSlot[ui] = ui;
 
@@ -213,24 +221,30 @@ public class LoadoutGridView : MonoBehaviour
 
     void EnsureDataSlots(int count)
     {
-        var pd = PlayerService.Instance.Data;
-        if (pd.loadoutSlots == null || pd.loadoutSlots.Count != count)
+        if (PD == null)
         {
-            pd.loadoutSlots = LoadoutModel.Expand(pd.loadout ?? new(), count, "");
-            PlayerService.Instance.Save();
+            Debug.LogWarning("[LoadoutGridView] PlayerData missing (PS null). Ensure PlayerService exists or Bind() before BuildIfNeeded.");
+            return;
+        }
+
+        if (PD.loadoutSlots == null || PD.loadoutSlots.Count != count)
+        {
+            PD.loadoutSlots = LoadoutModel.Expand(PD.loadout ?? new(), count, "");
+            PS.Save();
             Debug.Log("[LoadoutGridView] Expanded slots from meta.");
         }
 
         string S(string x) => string.IsNullOrEmpty(x) ? "-" : x;
-        Debug.Log($"[LoadoutGridView] Data slots[{pd.loadoutSlots.Count}] = [{string.Join(",", pd.loadoutSlots.Select(S))}]");
+        Debug.Log($"[LoadoutGridView] Data slots[{PD.loadoutSlots.Count}] = [{string.Join(",", PD.loadoutSlots.Select(S))}]");
     }
 
     public void RefreshAll()
     {
         if (!_built) { Debug.LogWarning("[LoadoutGridView] RefreshAll before build"); return; }
+        if (PD == null) { Debug.LogWarning("[LoadoutGridView] RefreshAll skipped: no PlayerData"); return; }
 
         if (coinsText != null)
-            coinsText.text = _loadout?.GetCoins().ToString() ?? PlayerService.Instance.Data.coins.ToString();
+            coinsText.text = _loadout?.GetCoins().ToString() ?? PD.coins.ToString();
 
         EnsureDataSlots(_slots.Count);
 
@@ -240,8 +254,7 @@ public class LoadoutGridView : MonoBehaviour
             var skin = _slots[ui].GetComponent<ChessSlotSkin>();
             if (skin != null)
             {
-                skin.index = ui;   // käytä visuaalista järjestystä, ei dataindeksiä
-                                   // (valinnainen) skin.columnsOverride = boardWidth; // jos haluat lukita sarakemäärän
+                skin.index = ui;
                 skin.Apply();
             }
         }
@@ -256,12 +269,10 @@ public class LoadoutGridView : MonoBehaviour
         var cell = _slots[uiIndex];
         int dataIndex = _uiToSlot[uiIndex];
 
-        // — Vilahtelunesto: jos tämä data-slotti on merkitty suppressiin,
-        // jätetään tämä kerta kokonaan väliin.
         if (_suppressDataOnce.Contains(dataIndex))
             return;
 
-        string type = GetTypeAt(dataIndex); // "" = tyhjä
+        string type = GetTypeAt(dataIndex);
 
         // Pidä DropSlot ajan tasalla AINA
         var drop = cell.GetComponent<DropSlot>() ?? cell.AddComponent<DropSlot>();
@@ -269,8 +280,6 @@ public class LoadoutGridView : MonoBehaviour
         drop.index = dataIndex;
         drop.loadoutView = this;
 
-        // DRAGIN AIKANA: älä siivoa aggressiivisesti, mutta luo puuttuva ikoni,
-        // jos tässä datapaikassa pitää olla nappula.
         if (UIDraggablePiece.s_IsDraggingAny)
         {
             if (!string.IsNullOrEmpty(type))
@@ -283,7 +292,6 @@ public class LoadoutGridView : MonoBehaviour
             return;
         }
 
-        // EI DRAGIA → normaali siivous + uudelleenrakennus
         for (int i = cell.transform.childCount - 1; i >= 0; i--)
             Destroy(cell.transform.GetChild(i).gameObject);
 
@@ -295,35 +303,22 @@ public class LoadoutGridView : MonoBehaviour
 
     void CreateIconIntoCell(GameObject cell, string type, int dataIndex, int uiIndex)
     {
-        // Luo perus GO
         GameObject iconGO = new GameObject("Icon", typeof(RectTransform));
         iconGO.transform.SetParent(cell.transform, false);
 
-        // RT → täyttää slotin
         var iconRT = (RectTransform)iconGO.transform;
         StretchRectToParent(iconRT);
 
-        // Näkyvyysvarmistus (varmistaa Image + CanvasGroup)
         UIDraggablePiece.EnsureIconVisible(iconGO);
         var img = iconGO.GetComponent<Image>();
-        var cg = iconGO.GetComponent<CanvasGroup>();
 
-        // LayoutElement – GridLayoutGroupin kumppani
         var le = iconGO.GetComponent<LayoutElement>() ?? iconGO.AddComponent<LayoutElement>();
         le.ignoreLayout = false;
         le.flexibleWidth = 0f;
         le.flexibleHeight = 0f;
-        if (grid != null)
-        {
-            le.preferredWidth = grid.cellSize.x;
-            le.preferredHeight = grid.cellSize.y;
-        }
-        else
-        {
-            le.preferredWidth = le.preferredHeight = 80f; // fallback
-        }
+        le.preferredWidth = grid != null ? grid.cellSize.x : 80f;
+        le.preferredHeight = grid != null ? grid.cellSize.y : 80f;
 
-        // Sprite bind katalogista
         Sprite sprite = null;
         if (gameCatalog != null)
         {
@@ -335,11 +330,9 @@ public class LoadoutGridView : MonoBehaviour
         {
             img.sprite = sprite;
             img.preserveAspect = true;
-            Debug.Log($"[LoadoutGridView] + sprite '{type}' ui={uiIndex} data={dataIndex}");
         }
         else
         {
-            // Fallback-väri/label
             img.color = new Color(0.2f, 0.6f, 0.9f, 0.85f);
             var lblGO = new GameObject("Label", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
             lblGO.transform.SetParent(iconGO.transform, false);
@@ -352,31 +345,21 @@ public class LoadoutGridView : MonoBehaviour
             tmp.raycastTarget = false;
         }
 
-        // --- FIX: lisää UIDraggablePiece + meta oikein ---
         var drag = iconGO.GetComponent<UIDraggablePiece>() ?? iconGO.AddComponent<UIDraggablePiece>();
 
-        // 1) payload / tunniste (tämä korjaa sun "payloadId=" -tyhjän)
-        drag.payloadId = type;       // <- KRITTIINEN
-        drag.typeName = type;       // jos sulla on vanha kenttä käytössä, pidä myös tämä
-
+        drag.payloadId = type;
+        drag.typeName = type;
         drag.payloadKind = DragPayloadKind.Piece;
 
-        // 2) origin: 
         drag.originKind = SlotKind.Loadout;
-        drag.originIndex = uiIndex; 
+        drag.originIndex = uiIndex; // UI index (muunnetaan swapissa dataindexiksi)
 
-        // 3) refit
         drag.loadoutView = this;
         drag.dragLayer = this.dragLayer;
         drag.useDragLayer = (this.dragLayer != null);
 
-        // (valinnainen mutta hyödyllinen debugiin)
         iconGO.name = $"Icon_{type}_ui{uiIndex}_data{dataIndex}";
     }
-
-
-
-
 
     static void StretchRectToParent(RectTransform rt)
     {
@@ -389,49 +372,54 @@ public class LoadoutGridView : MonoBehaviour
     // --- Data-luku/kirjoitus ---
     string GetTypeAt(int dataIndex)
     {
-        var slots = PlayerService.Instance.Data.loadoutSlots;
+        if (PD == null || PD.loadoutSlots == null) return "";
+        var slots = PD.loadoutSlots;
         if (dataIndex < 0 || dataIndex >= slots.Count) return "";
         return slots[dataIndex] ?? "";
     }
 
     void SetTypeAt(int dataIndex, string pieceId)
     {
-        var slots = PlayerService.Instance.Data.loadoutSlots;
+        if (PD == null || PD.loadoutSlots == null) return;
+        var slots = PD.loadoutSlots;
         if (dataIndex < 0 || dataIndex >= slots.Count) return;
         slots[dataIndex] = string.IsNullOrEmpty(pieceId) ? "" : pieceId;
-        PlayerService.Instance.Save();
+        PS.Save();
     }
 
     public void HandleDropToLoadout(DropSlot target, UIDraggablePiece drag)
     {
         if (drag == null || target == null) return;
+        if (PD == null) return;
 
         // 0) Normalisoi target dataIndex
         int targetDataIndex = target.index;
 
-        // Jos joku haamu DropSlot index=-1 pääsee läpi, yritä päätellä oikea slotti parentista
         if (targetDataIndex < 0)
         {
-            // Jos drop tuli UI-slotin GO:sta, se löytyy _slots-listasta
             int ui = _slots.IndexOf(target.gameObject);
             if (ui >= 0) targetDataIndex = UiToDataIndex(ui);
         }
 
-        // Jos edelleen invalid → älä tee mitään (ja loggaa kerran)
-        if (targetDataIndex < 0 || targetDataIndex >= PlayerService.Instance.Data.loadoutSlots.Count)
+        if (targetDataIndex < 0 || targetDataIndex >= PD.loadoutSlots.Count)
         {
             Debug.LogWarning($"[LoadoutDrop] Invalid target index={target.index} (resolved={targetDataIndex}) targetGO={target.name}");
             return;
         }
 
-        // 1) Tyhjän slotin tarkistus helperiksi
         bool TargetEmpty() => string.IsNullOrEmpty(GetTypeAt(targetDataIndex));
 
+        // --- Policy gates (MACRO SAFE) ---
+        if (!allowShopDrops && drag.originKind == SlotKind.Shop) return;
+        if (!allowAlchemistDrops && drag.originKind == SlotKind.AlchemistOutput) return;
+        if (!allowPowerupDrops && drag.payloadKind == DragPayloadKind.Powerup) return;
+
         // --- X) ALCHEMIST OUTPUT → LOADOUT ---
-        if (drag.originKind == SlotKind.AlchemistOutput && drag.payloadKind == DragPayloadKind.Piece)
+        if (allowAlchemistDrops &&
+            drag.originKind == SlotKind.AlchemistOutput &&
+            drag.payloadKind == DragPayloadKind.Piece)
         {
-            if (!string.IsNullOrEmpty(GetTypeAt(target.index)))
-                return;
+            if (!TargetEmpty()) return;
 
             if (drag.alchemistView == null)
             {
@@ -439,18 +427,20 @@ public class LoadoutGridView : MonoBehaviour
                 return;
             }
 
-            SuppressDataIndexOnce(target.index);
+            // FIX: käytä normalisoitua targetDataIndex
+            SuppressDataIndexOnce(targetDataIndex);
 
-            drag.alchemistView.ConsumeOutputToLoadout(target.index, drag);
+            drag.alchemistView.ConsumeOutputToLoadout(targetDataIndex, drag);
 
             StartCoroutine(CoRefreshAfterDrag());
-            drag.MarkConsumed(target.index);
+            drag.MarkConsumed(targetDataIndex);
             return;
         }
 
-
         // --- A) SHOP → LOADOUT: PIECE ostetaan tyhjään ruutuun ---
-        if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Piece)
+        if (allowShopDrops &&
+            drag.originKind == SlotKind.Shop &&
+            drag.payloadKind == DragPayloadKind.Piece)
         {
             if (!TargetEmpty())
             {
@@ -480,7 +470,10 @@ public class LoadoutGridView : MonoBehaviour
         }
 
         // --- B) SHOP → POWERUP ---
-        if (drag.originKind == SlotKind.Shop && drag.payloadKind == DragPayloadKind.Powerup)
+        if (allowShopDrops &&
+            allowPowerupDrops &&
+            drag.originKind == SlotKind.Shop &&
+            drag.payloadKind == DragPayloadKind.Powerup)
         {
             var shop = drag.shopView;
             if (shop == null)
@@ -495,22 +488,18 @@ public class LoadoutGridView : MonoBehaviour
                 return;
             }
 
-            PlayerService.Instance.AddPowerup(drag.payloadId, 1);
+            PS.AddPowerup(drag.payloadId, 1);
 
             StartCoroutine(CoRefreshAfterDrag());
             drag.MarkConsumed(targetDataIndex);
             return;
         }
 
-        // --- C) SHOP → (ei kelpaa loadoutille) ---
-        if (drag.originKind == SlotKind.Shop && drag.payloadKind != DragPayloadKind.Piece)
-            return;
-
         // --- D) LOADOUT ↔ LOADOUT swap ---
-        if (drag.originKind == SlotKind.Loadout)
+        if (allowLoadoutSwap && drag.originKind == SlotKind.Loadout)
         {
             int originDataIndex = UiToDataIndex(drag.originIndex);
-            if (originDataIndex < 0 || originDataIndex >= PlayerService.Instance.Data.loadoutSlots.Count)
+            if (originDataIndex < 0 || originDataIndex >= PD.loadoutSlots.Count)
                 return;
 
             if (originDataIndex == targetDataIndex) return;
@@ -528,40 +517,7 @@ public class LoadoutGridView : MonoBehaviour
         }
     }
 
-
-
-    GameObject CreateFallbackIcon(Transform parent, string label)
-    {
-        var go = new GameObject("FallbackIcon", typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(parent, false);
-
-        var img = go.GetComponent<Image>();
-        img.raycastTarget = true;
-        img.color = new Color(0.2f, 0.6f, 0.9f, 0.8f); // selkeä debug-väri
-
-        var textGO = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textGO.transform.SetParent(go.transform, false);
-        var t = textGO.GetComponent<TextMeshProUGUI>();
-        t.text = string.IsNullOrEmpty(label) ? "?" : label;
-        t.alignment = TextAlignmentOptions.Center;
-        t.enableAutoSizing = true;
-        t.raycastTarget = false;
-
-        var rt = (RectTransform)textGO.transform;
-        rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero; rt.offsetMax = Vector2.zero;
-
-        return go;
-    }
-
-    private static CanvasGroup EnsureCanvasGroup(GameObject go)
-    {
-        var cg = go.GetComponent<CanvasGroup>();
-        if (cg == null) cg = go.AddComponent<CanvasGroup>();
-        return cg;
-    }
-
-    private RectTransform EnsureDragLayer()
+    RectTransform EnsureDragLayer()
     {
         if (dragLayer != null) return dragLayer;
 
@@ -596,6 +552,4 @@ public class LoadoutGridView : MonoBehaviour
         if (_uiToSlot == null || uiIndex < 0 || uiIndex >= _uiToSlot.Length) return uiIndex;
         return _uiToSlot[uiIndex];
     }
-
-
 }

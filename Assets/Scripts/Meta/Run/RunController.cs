@@ -52,6 +52,14 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private int baseBattleDifficulty = 1;
     [SerializeField] private int baseShopTier = 1;
 
+    [Header("Encounter Pools")]
+    [SerializeField] private EncounterPoolSO battlePool;
+    [SerializeField] private EncounterPoolSO bossPool;
+
+    private EncounterSO _pendingEncounterOverride;
+
+
+
     [SerializeField] private DialogueController dialogue;
     [SerializeField] private DialoguePackSO hermitRestDialogue;
 
@@ -65,6 +73,9 @@ public sealed class RunController : MonoBehaviour
 
     private BestiaryService _bestiary;
     private BestiaryMatchHooks _bestiaryHooks;
+
+    private EnemySpec _pendingEnemySpecOverride;
+
 
 
     // ===== Dialogue wrappers =====
@@ -82,6 +93,10 @@ public sealed class RunController : MonoBehaviour
     public void TriggerReturnToMacro()
     {
         EnterMacroPhase();
+        macroView.SetVisible(true);
+        var pd = playerService != null ? playerService.Data : null;
+        macroView.Init(macroMap, pd != null ? pd.macroIndex : 0);
+
     }
 
 
@@ -144,7 +159,10 @@ public sealed class RunController : MonoBehaviour
 
         if (macroGenerator != null)
         {
-            macroMap = macroGenerator.Generate();
+            int seed = seedOverride ?? UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+            macroMap = macroGenerator.Generate(seed);
+            Debug.Log($"[Run] Generated macroMap rows={macroMap.rows} cols={macroMap.columns} tiles={macroMap.tiles?.Length}");
+
         }
 
 
@@ -221,7 +239,7 @@ public sealed class RunController : MonoBehaviour
 
         Debug.Log($"[RunController] MacroView={macroView.name}, activeBefore={macroView.gameObject.activeSelf}");
 
-        macroView.gameObject.SetActive(true);
+        macroView.SetVisible(true);
         macroView.Init(macroMap, pd.macroIndex);
         macroView.OnAdvance = HandleMacroAdvance;
 
@@ -248,6 +266,8 @@ public sealed class RunController : MonoBehaviour
         UIDraggablePiece.s_IsDraggingAny = false;
 
     }
+
+    
 
     /// <summary>
     /// Kutsutaan kun macroPiece siirtyy seuraavaan ruutuun.
@@ -290,6 +310,15 @@ public sealed class RunController : MonoBehaviour
         OpenEventFor(tile);
     }
 
+    private void ExitMacroPhaseUI()
+    {
+        if (macroView == null) return;
+
+        Debug.Log("[RunController] ExitMacroPhaseUI()");
+        macroView.SetVisible(false);
+    }
+
+
 
     /// <summary>
     /// Makroruudun määrittämä eventti.
@@ -298,9 +327,42 @@ public sealed class RunController : MonoBehaviour
     {
         playerService?.SetLastMacroEvent(tile.type.ToString());
 
+        bool opensAnotherView =
+            tile.type == MacroEventType.Battle ||
+            tile.type == MacroEventType.Boss ||
+            tile.type == MacroEventType.Shop ||
+            tile.type == MacroEventType.Alchemist ||
+            tile.type == MacroEventType.Rest;
+
+        if (opensAnotherView)
+            ExitMacroPhaseUI();
+
         switch (tile.type)
         {
             case MacroEventType.Battle:
+                {
+                    // 1) Yritä preset-poolia (scripted/handmade/preset tierit)
+                    _pendingEncounterOverride = battlePool != null ? battlePool.Pick(_pendingBattleDifficulty) : null;
+
+                    if (_pendingEncounterOverride != null)
+                    {
+                        Debug.Log($"[Macro] Battle tier={_pendingBattleDifficulty} picked preset={_pendingEncounterOverride.name}");
+                        StartNewEncounter();
+                        break;
+                    }
+
+                    // 2) Muuten budjetti → EnemySpec (Mode.Slots) (generoit tämän itse)
+                    //    Tämä ohittaa presetin ja käyttää LoadoutAssembler + drop-spawn logiikkaa.
+                    _pendingEnemySpecOverride = BuildEnemySpecFromBudget(_pendingBattleDifficulty);
+
+                    Debug.Log($"[Macro] Battle tier={_pendingBattleDifficulty} picked budget spec (mode={_pendingEnemySpecOverride?.mode})");
+                    StartNewEncounter();
+                    break;
+                }
+
+            case MacroEventType.Boss:
+                _pendingEncounterOverride = bossPool != null ? bossPool.Pick(_pendingBattleDifficulty) : null;
+                Debug.Log($"[Macro] Boss tier={_pendingBattleDifficulty} picked={(_pendingEncounterOverride ? _pendingEncounterOverride.name : "NULL")}");
                 StartNewEncounter();
                 break;
 
@@ -308,44 +370,110 @@ public sealed class RunController : MonoBehaviour
                 OpenShop();
                 break;
 
-            case MacroEventType.Rest:
-                Debug.Log("[RunController] Rest-tile → Hermit dialogue.");
-
-                if (dialogue != null && hermitRestDialogue != null)
-                {
-                    dialogue.StartDialogue(hermitRestDialogue, "Hermit", EnterMacroPhase);
-                }
-                else
-                {
-                    Debug.LogWarning("[RunController] Rest: Dialogue refs missing → fallback EnterMacroPhase().");
-                    EnterMacroPhase();
-                }
-                break;
-
-
-            case MacroEventType.RandomEvent:
-                // TODO: random event -paneeli. Nyt placeholder.
-                Debug.Log("[RunController] RandomEvent-tile ei vielä toteutettu → takaisin makroon.");
-                EnterMacroPhase();
-                break;
-
-            case MacroEventType.Boss:
-                // Toistaiseksi sama kuin Battle, myöhemmin erillinen boss encounter
-                Debug.Log("[RunController] Boss-tile → StartNewEncounter (placeholder).");
-                StartNewEncounter();
-                break;
-
-            case MacroEventType.None:
-            default:
-                Debug.Log("[RunController] Tyhjä macro-tile → hyppää suoraan seuraavaan makrofaseen.");
-                EnterMacroPhase();
-                break;
-
             case MacroEventType.Alchemist:
                 OpenAlchemist();
                 break;
+
+            case MacroEventType.Rest:
+                // dialogue -> palauttaa EnterMacroPhase callbackilla
+                if (dialogue != null && hermitRestDialogue != null)
+                    dialogue.StartDialogue(hermitRestDialogue, "Hermit", EnterMacroPhase);
+                else
+                    EnterMacroPhase();
+                break;
+
+            case MacroEventType.RandomEvent:
+            case MacroEventType.None:
+            default:
+                EnterMacroPhase();
+                break;
         }
     }
+
+
+    // RunController.cs
+    private EnemySpec BuildEnemySpecFromBudget(int tier)
+    {
+        // budjetti: säädä vapaasti
+        int budget = 2 + tier * 2; // esim tier1=4, tier2=6, tier3=8
+        int capCost = Mathf.Max(1, 1 + tier); // ei liian kalliita aikaisin
+
+        // kerää ehdokkaat catalogista
+        // (oleta että catalog.pieces listaa PieceDefSO:t)
+        var all = (catalog != null && catalog.pieces != null) ? catalog.pieces : new System.Collections.Generic.List<PieceDefSO>();
+
+        // sallitaan Pawn mukaan, King ei ole pakollinen tässä systeemissä
+        var candidates = all
+            .Where(p => p != null)
+            .Where(p => !string.IsNullOrEmpty(p.typeName))
+            .Where(p => p.typeName != "King")                 // King ei automaattinen
+            .Where(p => p.cost > 0 && p.cost <= capCost)      // tier-cap
+            .ToList();
+
+        // jos ei löydy mitään, fallback pawn
+        if (candidates.Count == 0)
+        {
+            return new EnemySpec
+            {
+                mode = EnemySpec.Mode.Slots,
+                blackSlots = new List<string> { "Pawn" },
+                useDropPlacement = true,
+                forbidWhiteAndAllyRows = 3,
+                backBiasPower = 2f,
+                fallbackFillBlackPawnsRow = false
+            };
+        }
+
+        var picks = new List<string>();
+
+        // pieni “minimi”: vähintään 1 nappula
+        int safety = 0;
+        while (budget > 0 && safety++ < 200)
+        {
+            // ehdokkaat jotka mahtuu jäljellä olevaan budjettiin
+            var fit = candidates.Where(p => p.cost <= budget).ToList();
+            if (fit.Count == 0) break;
+
+            // painotus: halvempi yleisempi
+            // w = 1 / cost^1.2
+            float totalW = 0f;
+            foreach (var p in fit) totalW += 1f / Mathf.Pow(p.cost, 1.2f);
+
+            float roll = UnityEngine.Random.value * totalW;
+            PieceDefSO chosen = fit[0];
+            foreach (var p in fit)
+            {
+                float w = 1f / Mathf.Pow(p.cost, 1.2f);
+                if (roll < w) { chosen = p; break; }
+                roll -= w;
+            }
+
+            picks.Add(chosen.typeName);
+            budget -= chosen.cost;
+        }
+
+        // jos mitään ei tullut, varmista pawn
+        if (picks.Count == 0) picks.Add("Pawn");
+
+        // (valinnainen) joskus lisätään King, mutta EI pakollinen:
+        // Jos lisäät kingin, sun pitää myöhemmin muuttaa game-end logiikkaa kuten sanoit.
+        // if (tier >= 2 && UnityEngine.Random.value < 0.4f) picks.Add("King");
+
+        return new EnemySpec
+        {
+            mode = EnemySpec.Mode.Slots,
+            blackSlots = picks,
+
+            useDropPlacement = true,
+            forbidWhiteAndAllyRows = 3,
+            backBiasPower = 2.2f,
+
+            // fallback-fill: oletuksena OFF (koska sanoit "vain silloin")
+            fallbackFillBlackPawnsRow = false,
+            fallbackBlackPawnsRelY = 1
+        };
+    }
+
 
     // ---------- SLOTIT ----------
 
@@ -613,7 +741,6 @@ public sealed class RunController : MonoBehaviour
 
         Debug.Log($"[RunController] StartNewEncounter resolver={_rules?.GetType().Name}");
 
-
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
 
         // 1) Luo GameState (template → custom geom, muuten width/height)
@@ -630,65 +757,157 @@ public sealed class RunController : MonoBehaviour
             _state = new GameState(geom);
         }
 
-        // 2) Valitse Encounter: override → slotMap+PlayerData → fallback
-        EncounterSO enc;
-        if (encounterOverride != null)
+        // 2) Valitse / rakenna Encounter
+        EncounterSO enc = null;
+
+        // --- A) Macro-eventin antama ENEMY SPEC (budjetti / slots) ---
+        if (_pendingEnemySpecOverride != null)
+        {
+            var spec = _pendingEnemySpecOverride;
+            _pendingEnemySpecOverride = null;
+
+            if (slotMap != null && PlayerService.Instance != null && PlayerService.Instance.Data != null)
+            {
+                EnsureSlotsOnce(16);
+                var pdata = PlayerService.Instance.Data;
+
+                // ✅ Drop-assembleri (tarvitsee board dimensiot)
+                enc = LoadoutAssembler.BuildFromPlayerDataDrop(
+                    pdata,
+                    slotMap,
+                    spec,
+                    boardWidth: _state.Width,
+                    boardHeight: _state.Height,
+                    implicitKingId: "King",
+                    totalSlots: 16
+                );
+
+                Debug.Log($"[RunController] Built encounter from player loadout + pending EnemySpec DROP (mode={spec.mode}).");
+            }
+            else
+            {
+                enc = BuildMinimalFallbackEncounter();
+                Debug.LogWarning("[RunController] slotMap/playerData missing -> using minimal fallback encounter (pending EnemySpec ignored).");
+            }
+        }
+
+
+        // --- B) Macro-eventin valitsema PRESET encounter (nykyinen logiikka) ---
+        else if (_pendingEncounterOverride != null)
+        {
+            var enemyPreset = _pendingEncounterOverride;
+            _pendingEncounterOverride = null;
+
+            if (slotMap != null && PlayerService.Instance != null && PlayerService.Instance.Data != null)
+            {
+                EnsureSlotsOnce(16);
+                var pdata = PlayerService.Instance.Data;
+
+                var spec = new EnemySpec
+                {
+                    mode = EnemySpec.Mode.PresetEncounter,
+                    preset = enemyPreset
+                };
+
+                enc = LoadoutAssembler.BuildFromPlayerDataDrop(
+    pdata,
+    slotMap,
+    spec,
+    boardWidth: _state.Width,
+    boardHeight: _state.Height,
+    implicitKingId: "King",
+    totalSlots: 16
+);
+
+                Debug.Log($"[RunController] Built encounter from player loadout + enemy preset '{enemyPreset.name}'.");
+            }
+            else
+            {
+                enc = enemyPreset;
+                Debug.LogWarning("[RunController] slotMap/playerData missing -> using enemy preset as-is (white side may be empty).");
+            }
+        }
+
+        // --- C) Inspector override (debug) ---
+        else if (encounterOverride != null)
         {
             enc = encounterOverride;
         }
+
+        // --- D) Muuten dynaamisesti normaalilla enemySpecillä ---
         else
         {
             EnsureSlotsOnce(16);
-            var pd = PlayerService.Instance.Data;
-            Debug.Log("[Run] loadoutSlots: " + string.Join(",", pd.loadoutSlots.Select(x => string.IsNullOrEmpty(x) ? "-" : x)));
-
             var pdata = PlayerService.Instance.Data;
+
             if (slotMap != null)
             {
                 var spec = enemySpec ?? new EnemySpec { mode = EnemySpec.Mode.Classic };
 
-                enc = LoadoutAssembler.BuildFromPlayerData(
-                    pdata,
-                    slotMap,
-                    spec,
-                    implicitKingId: "King",
-                    totalSlots: 16
-                );
+                enc = LoadoutAssembler.BuildFromPlayerDataDrop(
+    pdata,
+    slotMap,
+    spec,
+    boardWidth: _state.Width,
+    boardHeight: _state.Height,
+    implicitKingId: "King",
+    totalSlots: 16
+);
             }
             else
             {
                 enc = BuildMinimalFallbackEncounter();
             }
-
-            var drag = FindObjectOfType<DragController>();
-            if (drag != null) drag.enabled = true;
         }
 
+        if (enc == null)
+        {
+            Debug.LogError("[RunController] Encounter build failed -> using minimal fallback.");
+            enc = BuildMinimalFallbackEncounter();
+        }
+
+        // --- YHTEINEN: defaultit / turvallisuus ---
+        // SlotMap-pohjaiset encit on käytännössä aina relativeRanks = true.
+        // Älä kuitenkaan jyrää jos joku scripted/preset haluaa toisin.
+        // (Jos haluat väkisin: pidä tämä.)
         enc.relativeRanks = true;
-        enc.fillBlackPawnsAtY = true;
-        enc.blackPawnsY = 1; // 8x8: absY = 7 - 1 = 6
+
+        // Fallbackfill: vain mustat pawnit, ja vain jos encounterissa pyydetty.
+        // (ÄLÄ enää pakota aina true täällä.)
+        // Jos haluat yleisdefaultin budget-battleille: aseta se EnemySpecissä/Assemblerissa.
+        // enc.fillBlackPawnsAtY ja enc.blackPawnsY jätetään Encounter/Assemblerin vastuulle.
 
         // 3) Sijoittele nappulat
         EncounterLoader.Apply(_state, enc, catalog);
 
-        // --- Bestiary hook: attach to this encounter + scan initial seen (individuals) ---
+        // --- Bestiary hook ---
         if (_bestiaryHooks != null)
         {
             _bestiaryHooks.Attach(_state);
-            _bestiaryHooks.ScanInitialSeen();  // seen = individuals on board at start
+            _bestiaryHooks.ScanInitialSeen();
         }
 
         // 4) Piirto & input
         if (boardView == null)
             boardView = FindObjectOfType<BoardView>(true);
 
-        
-
         if (boardView != null)
         {
             boardView.SetCatalog(catalog);
             boardView.gameObject.SetActive(true);
+
             boardView.Init(_state, _rules, aiMode);
+
+            boardView.CanRevealEnemyMovesOnHover = (pv) =>
+            {
+                if (pv == null || _bestiary == null) return false;
+#if UNITY_EDITOR
+            Debug.Log($"[HoverGate] type={pv.TypeLabel} moveKnown={_bestiary.IsMoveKnown(pv.TypeLabel)}");
+#endif
+                return _bestiary.IsMoveKnown(pv.TypeLabel);
+            };
+
+            boardView.CanPlayerMoveEnemyPiece = (pv) => false;
             boardView.enabled = true;
         }
         else
@@ -699,6 +918,7 @@ public sealed class RunController : MonoBehaviour
         // 5) Game over -kuuntelu
         _state.OnGameEnded += OnGameEnded;
     }
+
 
     private void BuildRules()
     {

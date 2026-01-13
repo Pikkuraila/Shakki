@@ -94,7 +94,12 @@ public class DragController : MonoBehaviour
         _renderPos = _dragStartWorld;
 
         _legals = board.GenerateMovesFrom(_dragStartBoard).ToList();
-        board.ShowHighlightsPublic(_legals);
+
+        // Näytä drag-highlightit vain jos liikutat omaa. Vihollisen tiedot vain hoverilla.
+        if (pv.Owner == board.State.CurrentPlayer)
+            board.ShowHighlightsPublic(_legals);
+        else
+            board.ClearHighlightsPublic();
 
         _dragSR = pv.GetComponentInChildren<SpriteRenderer>(true);
         _prevSortingOrder = _dragSR ? _dragSR.sortingOrder : 0;

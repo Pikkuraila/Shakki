@@ -39,6 +39,7 @@ public class BoardView : MonoBehaviour
         => _state != null && c.x >= 0 && c.x < _state.Width && c.y >= 0 && c.y < _state.Height;
 
 
+    private readonly List<GameObject> _highlightPool = new();
 
 
     public GameState State => _state;
@@ -120,6 +121,17 @@ public class BoardView : MonoBehaviour
     private readonly List<GameObject> _highlights = new();
     private Coord? _selected;
 
+    // --- Intel hooks (injected from RunController) ---
+    // Return true if enemy moves may be revealed on hover (bestiary/item/perk)
+    public System.Func<PieceView, bool> CanRevealEnemyMovesOnHover;
+
+    // Return true if player is allowed to MOVE enemy pieces (e.g. item that allows acting on enemy turn)
+    public System.Func<PieceView, bool> CanPlayerMoveEnemyPiece;
+
+    private PieceView _hoverPV;
+    private (int x, int y)? _hoverBoard;
+    private List<Move> _hoverMoves = new();
+
 
 
     public enum AiMode
@@ -170,6 +182,76 @@ public class BoardView : MonoBehaviour
             _defByType[def.typeName] = def;
         }
     }
+
+    private void Update()
+    {
+        if (_state == null || _rules == null) return;
+
+        // Dragatessa ei hover-highlightteja (drag hoitaa omat highlightit)
+        if (Input.GetMouseButton(0)) return;
+
+        UpdateHoverIntel();
+    }
+
+    private void UpdateHoverIntel()
+    {
+        var w = MouseWorldPublic(Camera.main);
+        var c = WorldToBoardPublic(w);
+        if (!InBounds(c))
+        {
+            ClearHoverHighlightsIfNeeded();
+            return;
+        }
+
+        // Onko ruudussa nappulaa?
+        if (!_pieceViews.TryGetValue((c.x, c.y), out var pv) || pv == null)
+        {
+            ClearHoverHighlightsIfNeeded();
+            return;
+        }
+
+        // Vain vihollinen hover-intelillä (kuten pyysit)
+        // (jos joskus haluat oman nappulan hoveriin myös, tee tästä optio)
+        // ... pv löytyi ...
+
+        bool isEnemy = pv.Owner != _state.CurrentPlayer;
+
+        if (isEnemy)
+        {
+            bool allowed = (CanRevealEnemyMovesOnHover != null) && CanRevealEnemyMovesOnHover(pv);
+            if (!allowed)
+            {
+                ClearHoverHighlightsIfNeeded();
+                return;
+            }
+        }
+
+        // Jos hover on sama ruutu kuin viime frame, ei lasketa uudestaan
+        if (_hoverBoard.HasValue && _hoverBoard.Value.x == c.x && _hoverBoard.Value.y == c.y)
+            return;
+
+        _hoverBoard = c;
+        _hoverPV = pv;
+
+        // Legal moves (sama kuin muu peli)
+        _hoverMoves = _state.GenerateLegalMoves(new Coord(c.x, c.y), _rules)?.ToList() ?? new List<Move>();
+
+        ShowHighlightsPublic(_hoverMoves);
+
+    }
+
+    private void ClearHoverHighlightsIfNeeded()
+    {
+        if (_hoverBoard.HasValue)
+        {
+            _hoverBoard = null;
+            _hoverPV = null;
+            _hoverMoves.Clear();
+            ClearHighlightsPublic();
+        }
+    }
+
+
 
     void OnDestroy()
     {
@@ -335,34 +417,59 @@ public class BoardView : MonoBehaviour
 
     public void ClearHighlightsPublic()
     {
-        foreach (var h in _highlights) if (h) Destroy(h);
+        foreach (var h in _highlights)
+            if (h) { h.SetActive(false); _highlightPool.Add(h); }
         _highlights.Clear();
-
-        // Varmuussiivous: jos juureen jäi jotain
-        if (HLParent != null)
-        {
-            for (int i = HLParent.childCount - 1; i >= 0; i--)
-                Destroy(HLParent.GetChild(i).gameObject);
-        }
     }
+
 
     public void ShowHighlightsPublic(IEnumerable<Move> moves)
     {
         ClearHighlightsPublic();
+
         foreach (var m in moves)
         {
-            var go = Instantiate(HighlightPrefab, new Vector3(m.To.X, m.To.Y, -0.1f), Quaternion.identity, HLParent);
+            GameObject go = null;
+
+            // ota poolista jos löytyy
+            if (_highlightPool.Count > 0)
+            {
+                var last = _highlightPool.Count - 1;
+                go = _highlightPool[last];
+                _highlightPool.RemoveAt(last);
+                go.SetActive(true);
+            }
+            else
+            {
+                go = Instantiate(HighlightPrefab, HLParent);
+            }
+
+            go.transform.position = new Vector3(m.To.X, m.To.Y, -0.1f);
+            go.transform.SetParent(HLParent, worldPositionStays: true);
             _highlights.Add(go);
         }
     }
 
 
+
     public bool CanHumanMove(PieceView pv)
     {
         if (pv == null || _state == null) return false;
-        if (ai != null && _state.CurrentPlayer == "black") return false; // AI musta vuorolla
-        return pv.Owner == _state.CurrentPlayer;
+
+        bool isPlayersTurn = (pv.Owner == _state.CurrentPlayer);
+
+        // Normaalisti: et voi siirtää vihollista
+        bool canMoveEnemy = (!isPlayersTurn) &&
+                            (CanPlayerMoveEnemyPiece != null) &&
+                            CanPlayerMoveEnemyPiece(pv);
+
+        // AI estää ihmistä mustan vuorolla, ELLEI erikoisitem anna toimia mustan vuorolla
+        if (ai != null && _state.CurrentPlayer == "black" && !canMoveEnemy)
+            return false;
+
+        return isPlayersTurn || canMoveEnemy;
     }
+
 
     public bool TryDropPublic(PieceView pv, (int x, int y) from, (int x, int y) to, List<Move> cached)
     {

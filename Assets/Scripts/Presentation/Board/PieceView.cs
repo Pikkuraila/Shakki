@@ -11,6 +11,9 @@ public class PieceView : MonoBehaviour
     public string Owner;
     public string TypeLabel;
 
+    public string TypeName => TypeLabel;
+
+
     [Header("Collider")]
     [SerializeField] float colliderPadding = 0.25f; // lis‰‰ osuma-aluetta
     [SerializeField] bool colliderIsTrigger = true; // dragissa yleens‰ paras

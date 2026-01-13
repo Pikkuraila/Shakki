@@ -1,3 +1,4 @@
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "Shakki/Meta/MacroMap Generator", fileName = "MacroMapGenerator")]
@@ -15,111 +16,136 @@ public class MacroMapGeneratorSO : ScriptableObject
 
     [Header("Rules")]
     public bool guaranteeOneBattlePerRow = true;
-    public float shopChancePerRow = 0.15f;       // keskimäärin yksi shop ~6–7 rivissä
+    public float shopChancePerRow = 0.15f;
     public float restChancePerRow = 0.10f;
     public float randomChancePerRow = 0.20f;
 
     [Header("Boss Placement")]
     public bool generateBoss = true;
-    public int bossRowOffset = -1;   // viimeiselle riville (rows - 1)
+    public int bossRowOffset = -1;
 
-    /// <summary>
-    /// Generoi uuden MacroMapSO-instanssin sääntöjen mukaan.
-    /// </summary>
+    // âœ… vanha kutsu toimii edelleen
     public MacroMapSO Generate()
     {
-        var map = ScriptableObject.CreateInstance<MacroMapSO>();
-        map.rows = rows;
-        map.columns = columns;
-        map.tiles = new MacroTileDef[rows * columns];
+        int seed = Random.Range(int.MinValue, int.MaxValue);
+        return Generate(seed);
+    }
 
-        for (int r = 0; r < rows; r++)
-        {
-            GenerateRow(map, r);
-        }
+    // âœ… tÃ¤mÃ¤ on se mitÃ¤ RunController nyt kutsuu
+    public MacroMapSO Generate(int seed)
+    {
+        var prev = Random.state;
+        Random.InitState(seed);
 
-        // Boss sijoitetaan
-        if (generateBoss)
+        try
         {
-            int br = Mathf.Clamp(rows + bossRowOffset, 0, rows - 1);
-            int bc = columns / 2;
-            map.tiles[map.GetIndex(br, bc)] = new MacroTileDef
+            var map = ScriptableObject.CreateInstance<MacroMapSO>();
+            map.rows = rows;
+            map.columns = columns;
+            map.tiles = new MacroTileDef[rows * columns];
+
+            for (int r = 0; r < rows; r++)
+                GenerateRow(map, r);
+
+            // Start tile keskelle ylÃ¶s (turvallinen)
+            int startRow = 0;
+            int startCol = columns / 2;
+            map.tiles[map.GetIndex(startRow, startCol)] = new MacroTileDef { type = MacroEventType.None };
+
+            // Boss viimeiselle riville keskelle
+            if (generateBoss)
             {
-                type = MacroEventType.Boss
-            };
-        }
+                int br = Mathf.Clamp(rows + bossRowOffset, 0, rows - 1);
+                int bc = columns / 2;
+                map.tiles[map.GetIndex(br, bc)] = new MacroTileDef { type = MacroEventType.Boss };
+            }
 
-        return map;
+            return map;
+        }
+        finally
+        {
+            Random.state = prev;
+        }
     }
 
     private void GenerateRow(MacroMapSO map, int row)
     {
         int columns = map.columns;
 
-        // Heuristiikka: perusriville arvotaan tile-tyypit
+        // 0) nollaa rivi
+        for (int c = 0; c < columns; c++)
+            map.tiles[map.GetIndex(row, c)] = new MacroTileDef { type = MacroEventType.None };
+
+        // 1) specialit tyhjiin sloteihin
+        TryPlaceSpecialInEmpty(map, row, MacroEventType.Shop, shopChancePerRow);
+        TryPlaceSpecialInEmpty(map, row, MacroEventType.Rest, restChancePerRow);
+        TryPlaceSpecialInEmpty(map, row, MacroEventType.RandomEvent, randomChancePerRow);
+
+        // 2) tÃ¤ytÃ¤ loput perusjakaumalla
         for (int c = 0; c < columns; c++)
         {
             int idx = map.GetIndex(row, c);
-            map.tiles[idx] = RollTile();
+            if (map.tiles[idx].type != MacroEventType.None) continue;
+
+            map.tiles[idx] = RollBaseTile();
         }
 
-        // Pakotetaan vähintään 1 battle jos halutaan
+        // 3) pakota vÃ¤hintÃ¤Ã¤n yksi battle
         if (guaranteeOneBattlePerRow)
         {
             bool anyBattle = false;
             for (int c = 0; c < columns; c++)
-            {
-                if (map.tiles[map.GetIndex(row, c)].type == MacroEventType.Battle)
-                {
-                    anyBattle = true;
-                    break;
-                }
-            }
+                if (map.tiles[map.GetIndex(row, c)].type == MacroEventType.Battle) { anyBattle = true; break; }
 
             if (!anyBattle)
             {
-                int c = Random.Range(0, columns);
-                int idx = map.GetIndex(row, c);
-                map.tiles[idx].type = MacroEventType.Battle;
+                int chosen = map.GetIndex(row, Random.Range(0, columns));
+                map.tiles[chosen] = new MacroTileDef { type = MacroEventType.Battle };
             }
         }
 
-        // Chance-lisäykset (shop/rest/random)
-        TryPlaceSpecial(map, row, MacroEventType.Shop, shopChancePerRow);
-        TryPlaceSpecial(map, row, MacroEventType.Rest, restChancePerRow);
-        TryPlaceSpecial(map, row, MacroEventType.RandomEvent, randomChancePerRow);
+        // 4) (valinnainen) offsetit
+        for (int c = 0; c < columns; c++)
+        {
+            int idx = map.GetIndex(row, c);
+            var t = map.tiles[idx];
+
+            if (t.type == MacroEventType.Battle)
+                t.difficultyOffset = Random.Range(-1, 2); // -1..1
+
+            if (t.type == MacroEventType.Shop)
+                t.shopTierOffset = 0;
+
+            map.tiles[idx] = t;
+        }
     }
 
-    private MacroTileDef RollTile()
+    private MacroTileDef RollBaseTile()
     {
-        int total =
-            weightBattle +
-            weightShop +
-            weightRest +
-            weightRandom;
-
+        int total = weightBattle + weightRandom;
         int roll = Random.Range(0, total);
-
         if (roll < weightBattle) return new MacroTileDef { type = MacroEventType.Battle };
-        roll -= weightBattle;
-
-        if (roll < weightShop) return new MacroTileDef { type = MacroEventType.Shop };
-        roll -= weightShop;
-
-        if (roll < weightRest) return new MacroTileDef { type = MacroEventType.Rest };
-        roll -= weightRest;
-
         return new MacroTileDef { type = MacroEventType.RandomEvent };
     }
 
-    private void TryPlaceSpecial(MacroMapSO map, int row, MacroEventType type, float chance)
+    private void TryPlaceSpecialInEmpty(MacroMapSO map, int row, MacroEventType type, float chance)
     {
         if (Random.value >= chance) return;
 
         int columns = map.columns;
-        int col = Random.Range(0, columns);
-        int idx = map.GetIndex(row, col);
+        var emptyCols = new List<int>();
 
-        map.tiles[idx] = new MacroTileDef { type = type };
+        for (int c = 0; c < columns; c++)
+        {
+            int idx = map.GetIndex(row, c);
+            if (map.tiles[idx].type == MacroEventType.None)
+                emptyCols.Add(c);
+        }
+
+        if (emptyCols.Count == 0) return;
+
+        int col = emptyCols[Random.Range(0, emptyCols.Count)];
+        int i = map.GetIndex(row, col);
+        map.tiles[i] = new MacroTileDef { type = type };
     }
 }

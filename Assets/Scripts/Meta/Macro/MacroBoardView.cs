@@ -8,21 +8,22 @@ public sealed class MacroBoardView : MonoBehaviour
     public MacroMapSO map;
 
     [Header("Layout")]
-    public Transform cellsRoot;    // Parent, jolla on esim. GridLayoutGroup
-    public GameObject cellPrefab;  // Prefab yhdelle ruudulle (sis. MacroCellView + DropHandler)
+    public Transform cellsRoot;
+    public GameObject cellPrefab;
 
     [Header("Piece")]
-    public UIDraggablePiece macroPiece; // Makrotason kuningas
+    public UIDraggablePiece macroPiece;
 
-    // RunController voi subscibata tähän
+    [Header("Loadout (UI)")]
+    public GameObject loadoutRoot;     // <- tämä on se panel/GO jonka haluat päälle/pois
+    public LoadoutGridView loadoutGrid; // <- itse komponentti (optional, refreshiin)
+
+
     public Action<int> OnAdvance;
 
     private MacroCellView[] _cells;
     private int _currentIndex = -1;
 
-    /// <summary>
-    /// Kutsutaan RunControllerista, kun halutaan näyttää makrolauta tietylle indexille.
-    /// </summary>
     public void Init(MacroMapSO map, int currentIndex)
     {
         Debug.Log($"[MacroBoardView] Init map={map}, index={currentIndex}, cellsRoot={cellsRoot}, cellPrefab={cellPrefab}, macroPiece={macroPiece}");
@@ -31,6 +32,65 @@ public sealed class MacroBoardView : MonoBehaviour
 
         BuildIfNeeded();
         RefreshAll();
+
+        EnsureLoadoutGrid();
+    }
+
+    void Start()
+    {
+        BuildIfNeeded();
+        RefreshAll();
+
+        EnsureLoadoutGrid();
+    }
+
+    public void SetVisible(bool visible)
+    {
+        Debug.Log($"[MacroBoardView] SetVisible({visible}) macroGO={gameObject.name} activeBefore={gameObject.activeSelf} " +
+                  $"loadoutRoot={(loadoutRoot != null ? loadoutRoot.name : "NULL")} " +
+                  $"loadoutRootActiveBefore={(loadoutRoot != null ? loadoutRoot.activeSelf.ToString() : "NULL")} " +
+                  $"loadoutGrid={(loadoutGrid != null ? loadoutGrid.name : "NULL")} " +
+                  $"loadoutGridActiveBefore={(loadoutGrid != null ? loadoutGrid.gameObject.activeSelf.ToString() : "NULL")}");
+
+        gameObject.SetActive(visible);
+
+        if (loadoutRoot != null)
+            loadoutRoot.SetActive(visible);
+        else if (loadoutGrid != null)
+            loadoutGrid.gameObject.SetActive(visible);
+
+        if (visible && loadoutGrid != null)
+        {
+            loadoutGrid.BuildIfNeeded();
+            loadoutGrid.RefreshAll();
+        }
+    }
+
+
+
+
+
+
+
+    private void EnsureLoadoutGrid()
+    {
+        
+
+
+        
+        if (loadoutGrid == null) return;
+
+        loadoutGrid.allowShopDrops = false;
+        loadoutGrid.allowAlchemistDrops = false;
+        loadoutGrid.allowPowerupDrops = false;
+        loadoutGrid.allowLoadoutSwap = true;
+
+        loadoutGrid.BuildIfNeeded();
+        loadoutGrid.RefreshAll();
+
+        Debug.Log($"[MacroBoardView] Loadout ensured. grid={(loadoutGrid.grid ? loadoutGrid.grid.name : "NULL")} children={(loadoutGrid.grid ? loadoutGrid.grid.transform.childCount : -1)}");
+
+
     }
 
     private void BuildIfNeeded()
@@ -45,16 +105,13 @@ public sealed class MacroBoardView : MonoBehaviour
         int columns = map.columns;
         int needed = rows * columns;
 
-        // *** UUSI PÄTKÄ ***
         var grid = cellsRoot.GetComponent<GridLayoutGroup>();
         if (grid != null)
         {
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = columns;   // esim. 3
+            grid.constraintCount = columns;
         }
-        // *** UUSI PÄTKÄ LOPPU ***
 
-        // Jos lapsia liian vähän tai liikaa -> rebuild
         bool needRebuild = cellsRoot.childCount != needed;
 
         if (needRebuild)
@@ -93,23 +150,16 @@ public sealed class MacroBoardView : MonoBehaviour
         }
     }
 
-
-
     private void RefreshAll()
     {
         if (map == null || _cells == null) return;
 
-        // Päivitä ruutujen visuaalit
         for (int i = 0; i < _cells.Length; i++)
         {
-            var tile = map.tiles != null && i < map.tiles.Length
-                ? map.tiles[i]
-                : default;
-
+            var tile = map.tiles != null && i < map.tiles.Length ? map.tiles[i] : default;
             _cells[i].Refresh(tile, _currentIndex);
         }
 
-        // Siirrä nappula oikeaan ruutuun
         EnsurePieceOnCurrentCell();
     }
 
@@ -125,43 +175,25 @@ public sealed class MacroBoardView : MonoBehaviour
         macroPiece.transform.localPosition = Vector3.zero;
     }
 
-    /// <summary>
-    /// Tätä kutsutaan DropHandlerista kun nappula pudotetaan johonkin ruutuun.
-    /// </summary>
     public void HandleDropToCell(int targetIndex)
     {
         if (_cells == null || map == null) return;
-        if (targetIndex < 0 || targetIndex >= _cells.Length)
-        {
-            // Palauta nappula
-            EnsurePieceOnCurrentCell();
-            return;
-        }
-
-        if (_currentIndex < 0 || _currentIndex >= _cells.Length)
-        {
-            EnsurePieceOnCurrentCell();
-            return;
-        }
+        if (targetIndex < 0 || targetIndex >= _cells.Length) { EnsurePieceOnCurrentCell(); return; }
+        if (_currentIndex < 0 || _currentIndex >= _cells.Length) { EnsurePieceOnCurrentCell(); return; }
 
         int columns = map.columns;
 
-        // Index -> (row, col)
         int currentRow = _currentIndex / columns;
         int currentCol = _currentIndex % columns;
 
         int targetRow = targetIndex / columns;
         int targetCol = targetIndex % columns;
 
-        // SALLITAAN VAIN:
-        // - yksi rivi eteenpäin
-        // - max 1 sarakkeen sivuttaisliike
         bool isForwardOneRow = targetRow == currentRow + 1;
         bool isWithinSideStep = Mathf.Abs(targetCol - currentCol) <= 1;
 
         if (!isForwardOneRow || !isWithinSideStep)
         {
-            // Ei sallittu liike → palautetaan nappula
             EnsurePieceOnCurrentCell();
             return;
         }
@@ -172,11 +204,6 @@ public sealed class MacroBoardView : MonoBehaviour
         OnAdvance?.Invoke(_currentIndex);
     }
 
-
-
-    /// <summary>
-    /// Voidaan kutsua ulkopuolelta, jos halutaan pakottaa index ilman dragia.
-    /// </summary>
     public void SetIndex(int index)
     {
         _currentIndex = Mathf.Clamp(index, 0, map != null ? map.TileCount - 1 : index);

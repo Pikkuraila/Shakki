@@ -112,9 +112,17 @@ namespace Shakki.Meta.Bestiary
 
         private static string NormalizeArchetypeId(string typeName)
         {
-            // Your current TypeName is "Pawn", "Rook"... Bestiary ids in my earlier examples were "pawn".
-            // Pick one convention and normalize here.
-            return string.IsNullOrEmpty(typeName) ? "" : typeName.ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(typeName))
+                return "";
+
+            typeName = typeName.Trim();
+
+            // Canonical: PascalCase ("Pawn", "Rook", "Amazon", ...)
+            if (typeName.Length == 1)
+                return typeName.ToUpperInvariant();
+
+            return char.ToUpperInvariant(typeName[0]) + typeName.Substring(1);
         }
+
     }
 }

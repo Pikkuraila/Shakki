@@ -25,6 +25,15 @@ namespace Shakki.Meta.Bestiary
             Save();
         }
 
+        public bool IsMoveKnown(string archetypeId)
+        {
+            archetypeId = Norm(archetypeId);
+
+            var e = GetOrCreate(archetypeId);
+            return e != null && (e.unlocks & BestiaryUnlock.MoveKnown) != 0;
+        }
+
+
         public void Load()
         {
             _data = _store?.Load() ?? new BestiarySaveData();
@@ -92,6 +101,8 @@ namespace Shakki.Meta.Bestiary
 
         public void RecordKill(string archetypeId, int amount = 1)
         {
+            archetypeId = Norm(archetypeId);
+
             var e = GetOrCreate(archetypeId);
             if (e == null) return;
 
@@ -103,6 +114,15 @@ namespace Shakki.Meta.Bestiary
 
             Save();
         }
+
+        private static string Norm(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return id;
+            // Tavoite: "Pawn" "Rook" jne (PascalCase)
+            // Jos haluat tiukemman mappingin myöhemmin, tee dict.
+            return char.ToUpperInvariant(id[0]) + id.Substring(1);
+        }
+
 
         public bool HasUnlock(string archetypeId, BestiaryUnlock unlock)
         {

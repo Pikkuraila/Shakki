@@ -74,25 +74,42 @@ public static class EncounterLoader
             s.Set(c, piece);
         }
 
-        // 2) Täytä mustan sotilasrivi tarvittaessa
+        // 2) Fallback-fill: lisää 1 musta sotilas vain jos ei tullut yhtään mustaa nappulaa
         if (enc.fillBlackPawnsAtY)
         {
-            int absY = enc.relativeRanks ? (s.Height - 1 - enc.blackPawnsY) : enc.blackPawnsY;
-            var pawnDef = catalog.GetPieceById("Pawn");
-            if (pawnDef == null)
-                Debug.LogWarning("[EncounterLoader] No PieceDefSO found for 'Pawn' when filling black pawns row.");
-
-            for (int x = 0; x < s.Width; x++)
+            bool anyBlack = false;
+            foreach (var c in s.AllCoords())
             {
-                var c = new Coord(x, absY);
-                if (!s.InBounds(c)) continue;
-                if (s.Get(c) != null) continue;
+                var p = s.Get(c);
+                if (p != null && string.Equals(p.Owner, "black", StringComparison.OrdinalIgnoreCase))
+                {
+                    anyBlack = true;
+                    break;
+                }
+            }
 
-                var pawn = pawnDef != null ? CreatePieceFromDef("black", pawnDef)
-                                           : new Piece("black", "Pawn", Array.Empty<IMoveRule>());
-                s.Set(c, pawn);
+            if (!anyBlack)
+            {
+                int absY = enc.relativeRanks ? (s.Height - 1 - enc.blackPawnsY) : enc.blackPawnsY;
+                var pawnDef = catalog.GetPieceById("Pawn");
+
+                for (int x = 0; x < s.Width; x++)
+                {
+                    var c = new Coord(x, absY);
+                    if (!s.InBounds(c)) continue;
+                    if (s.Get(c) != null) continue;
+
+                    var pawn = pawnDef != null
+                        ? CreatePieceFromDef("black", pawnDef)
+                        : new Piece("black", "Pawn", Array.Empty<IMoveRule>());
+
+                    s.Set(c, pawn);
+                    Debug.Log($"[EL] Fallback-fill: spawned black Pawn at ({c.X},{c.Y})");
+                    break;
+                }
             }
         }
+
     }
 
     // --- Helpers ---
