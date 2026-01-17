@@ -4,8 +4,6 @@ using UnityEngine;
 using Shakki.Core;
 using System.Linq;
 
-
-
 public class BoardView : MonoBehaviour
 {
     // --- DEBUG SWITCH ---
@@ -30,17 +28,28 @@ public class BoardView : MonoBehaviour
         return GenerateMovesFrom(_state, new Coord(from.x, from.y)) ?? Enumerable.Empty<Move>();
     }
 
-    public (int x, int y) WorldToBoardPublic(Vector3 w)
+    // ----------------------------
+    // Board (grid) <-> World helpers
+    // ----------------------------
+    private Vector3 BoardToWorld(int x, int y, float z = 0f)
+        => new Vector3(x * tileSize, y * tileSize, z);
+
+    private (int x, int y) WorldToBoard(Vector3 w)
     {
-        return (Mathf.RoundToInt(w.x), Mathf.RoundToInt(w.y));
+        // Robust rounding to nearest tile center when centers are at x*tileSize, y*tileSize
+        int bx = Mathf.FloorToInt((w.x / tileSize) + 0.5f);
+        int by = Mathf.FloorToInt((w.y / tileSize) + 0.5f);
+        return (bx, by);
     }
+
+    public (int x, int y) WorldToBoardPublic(Vector3 w)
+        => WorldToBoard(w);
+
 
     private bool InBounds((int x, int y) c)
         => _state != null && c.x >= 0 && c.x < _state.Width && c.y >= 0 && c.y < _state.Height;
 
-
     private readonly List<GameObject> _highlightPool = new();
-
 
     public GameState State => _state;
 
@@ -59,9 +68,8 @@ public class BoardView : MonoBehaviour
     public int? seedOverride;              // jos käytät random tageja
 
     [Header("View")]
-    public float tileSize = 1f;
-    public float cameraPaddingTiles = 0.5f; // extra “tyhjää” reunoille
-
+    public float tileSize = 0.38f;              // IMPORTANT: world-units per tile (use this to match 38x38 etc.)
+    public float cameraPaddingTiles = 0.5f;  // extra “tyhjää” reunoille
 
     [Header("Catalog (runtime defs fallback)")]
     [SerializeField] private GameCatalogSO catalog;
@@ -70,16 +78,13 @@ public class BoardView : MonoBehaviour
     // Välimuisti, jotta voidaan siivota/päivittää laattoja
     readonly Dictionary<(int x, int y), GameObject> _tiles = new();
 
-
     [Header("Start Pieces")]
-
     public PieceDefSO WhiteRookDef;
     public PieceDefSO WhiteKingDef;
     public PieceDefSO WhiteBishopDef;
     public PieceDefSO WhiteKnightDef;
     public PieceDefSO WhitePawnDef;
     public PieceDefSO WhiteQueenDef;
-
 
     public PieceDefSO BlackBishopDef;
     public PieceDefSO BlackKnightDef;
@@ -110,8 +115,6 @@ public class BoardView : MonoBehaviour
     public PieceDefSO WhiteJokerDef;
     public PieceDefSO BlackJokerDef;
 
-
-
     [Header("Def Registry")]
     public List<PieceDefSO> AllPieceDefs = new(); // vedä tänne kaikki käyttämäsi PieceDefSO:t
 
@@ -122,17 +125,12 @@ public class BoardView : MonoBehaviour
     private Coord? _selected;
 
     // --- Intel hooks (injected from RunController) ---
-    // Return true if enemy moves may be revealed on hover (bestiary/item/perk)
     public System.Func<PieceView, bool> CanRevealEnemyMovesOnHover;
-
-    // Return true if player is allowed to MOVE enemy pieces (e.g. item that allows acting on enemy turn)
     public System.Func<PieceView, bool> CanPlayerMoveEnemyPiece;
 
     private PieceView _hoverPV;
     private (int x, int y)? _hoverBoard;
     private List<Move> _hoverMoves = new();
-
-
 
     public enum AiMode
     {
@@ -170,8 +168,6 @@ public class BoardView : MonoBehaviour
         DumpStateSnapshot("init");
     }
 
-
-
     void Awake()
     {
         EnsureRuntimeRoots();
@@ -196,7 +192,7 @@ public class BoardView : MonoBehaviour
     private void UpdateHoverIntel()
     {
         var w = MouseWorldPublic(Camera.main);
-        var c = WorldToBoardPublic(w);
+        var c = WorldToBoard(w);
         if (!InBounds(c))
         {
             ClearHoverHighlightsIfNeeded();
@@ -209,10 +205,6 @@ public class BoardView : MonoBehaviour
             ClearHoverHighlightsIfNeeded();
             return;
         }
-
-        // Vain vihollinen hover-intelillä (kuten pyysit)
-        // (jos joskus haluat oman nappulan hoveriin myös, tee tästä optio)
-        // ... pv löytyi ...
 
         bool isEnemy = pv.Owner != _state.CurrentPlayer;
 
@@ -237,7 +229,6 @@ public class BoardView : MonoBehaviour
         _hoverMoves = _state.GenerateLegalMoves(new Coord(c.x, c.y), _rules)?.ToList() ?? new List<Move>();
 
         ShowHighlightsPublic(_hoverMoves);
-
     }
 
     private void ClearHoverHighlightsIfNeeded()
@@ -251,14 +242,9 @@ public class BoardView : MonoBehaviour
         }
     }
 
-
-
     void OnDestroy()
     {
-        // Siivotaan elegantisti, mutta ei tuhoa itseään uudelleen jos Unity jo tuhoaa
         try { Teardown(destroySelfGO: false); } catch { }
-
-        // (Ei tarvitse enää erikseen -= eventit, Teardown hoitaa sen.)
     }
 
     void CenterAndFitCamera()
@@ -266,8 +252,7 @@ public class BoardView : MonoBehaviour
         var cam = Camera.main;
         if (!cam) return;
 
-        // Keskipiste maailman­koordinaateissa
-        float worldW = (_state.Width)  * tileSize;
+        float worldW = (_state.Width) * tileSize;
         float worldH = (_state.Height) * tileSize;
         float cx = worldW * 0.5f - tileSize * 0.5f;
         float cy = worldH * 0.5f - tileSize * 0.5f;
@@ -275,22 +260,16 @@ public class BoardView : MonoBehaviour
         cam.transform.position = new Vector3(cx, cy, -10f);
         cam.orthographic = true;
 
-        // Fittaa koko lauta ruutuun aspectin mukaan + padding
         float pad = cameraPaddingTiles * tileSize;
-        float halfW = worldW * 0.5f + pad;
-        float halfH = worldH * 0.5f + pad;
+        float halfW = worldW * 0.25f + pad;
+        float halfH = worldH * 0.25f + pad;
 
         float aspect = (float)Screen.width / Screen.height;
-        // orthoSize on “puoli-korkeus”; leveysvaatimus tulee jakamalla aspectilla
         float needByHeight = halfH;
-        float needByWidth  = halfW / aspect;
+        float needByWidth = halfW / aspect;
 
         cam.orthographicSize = Mathf.Max(needByHeight, needByWidth);
     }
-
-    // Varmista että BuildBoardTiles ja SetupStartPosition käyttävät:
-    // foreach (var c in _state.AllCoords()) { ... }
-    // eikä kiinteitä for (y < 8) -silmukoita.
 
     private bool _aiRunning = false;
 
@@ -305,7 +284,6 @@ public class BoardView : MonoBehaviour
         }
     }
 
-
     public void SetupClassicStart()
     {
         // Valkoinen
@@ -315,8 +293,8 @@ public class BoardView : MonoBehaviour
         _state.Set(new Coord(7, 0), WhiteRookDef.Build("white"));
         _state.Set(new Coord(2, 0), WhiteBishopDef.Build("white"));
         _state.Set(new Coord(5, 0), WhiteBishopDef.Build("white"));
-        _state.Set(new Coord(1,0), WhiteKnightDef.Build("white"));
-        _state.Set(new Coord(6,0), WhiteKnightDef.Build("white"));
+        _state.Set(new Coord(1, 0), WhiteKnightDef.Build("white"));
+        _state.Set(new Coord(6, 0), WhiteKnightDef.Build("white"));
         _state.Set(new Coord(0, 1), WhitePawnDef.Build("white"));
         _state.Set(new Coord(1, 1), WhitePawnDef.Build("white"));
         _state.Set(new Coord(2, 1), WhitePawnDef.Build("white"));
@@ -326,11 +304,6 @@ public class BoardView : MonoBehaviour
         _state.Set(new Coord(6, 1), WhitePawnDef.Build("white"));
         _state.Set(new Coord(7, 1), WhitePawnDef.Build("white"));
 
-        //testi erikoisnappulat
-
-
-
-
         // Musta
         _state.Set(new Coord(0, 7), BlackRookDef.Build("black"));
         _state.Set(new Coord(3, 7), BlackKingDef.Build("black"));
@@ -338,8 +311,8 @@ public class BoardView : MonoBehaviour
         _state.Set(new Coord(7, 7), BlackRookDef.Build("black"));
         _state.Set(new Coord(2, 7), BlackBishopDef.Build("black"));
         _state.Set(new Coord(5, 7), BlackBishopDef.Build("black"));
-        _state.Set(new Coord(1,7), BlackKnightDef.Build("black"));
-        _state.Set(new Coord(6,7), BlackKnightDef.Build("black"));
+        _state.Set(new Coord(1, 7), BlackKnightDef.Build("black"));
+        _state.Set(new Coord(6, 7), BlackKnightDef.Build("black"));
         _state.Set(new Coord(0, 6), BlackPawnDef.Build("black"));
         _state.Set(new Coord(1, 6), BlackPawnDef.Build("black"));
         _state.Set(new Coord(2, 6), BlackPawnDef.Build("black"));
@@ -348,17 +321,13 @@ public class BoardView : MonoBehaviour
         _state.Set(new Coord(5, 6), BlackPawnDef.Build("black"));
         _state.Set(new Coord(6, 6), BlackPawnDef.Build("black"));
         _state.Set(new Coord(7, 6), BlackPawnDef.Build("black"));
-
-
     }
-
 
     // Pidä nämä public/serialized kentät BoardViewissä:
     [SerializeField] private string tilesSortingLayer = "BoardTiles";
     [SerializeField] private int tilesSortingOrder = 0;
     [SerializeField] private float tilesZ = 0f;
 
-    // ...BuildBoardTiles sisällä:
     void BuildBoardTiles()
     {
         // 0) Siivoa vanhat
@@ -383,7 +352,7 @@ public class BoardView : MonoBehaviour
                 prefab.AddComponent<SpriteRenderer>(); // tyhjä SR, väri täytetään alla
             }
 
-            var pos = new Vector3(c.X * tileSize, c.Y * tileSize, tilesZ);
+            var pos = BoardToWorld(c.X, c.Y, tilesZ);
             var go = Instantiate(prefab, pos, Quaternion.identity, TilesParent);
             go.name = $"Tile_{c.X}_{c.Y}";
 
@@ -391,13 +360,12 @@ public class BoardView : MonoBehaviour
             if (!go.TryGetComponent<SpriteRenderer>(out var sr))
                 sr = go.AddComponent<SpriteRenderer>();
 
-            // Pakota perusmateriaali (jos FX on rikkonut sen)
             if (sr.sharedMaterial == null || sr.sharedMaterial.shader == null)
                 sr.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
 
-            sr.sortingLayerName = tilesSortingLayer; // esim. "BoardTiles"
-            sr.sortingOrder = tilesSortingOrder;     // esim. 0
-            sr.enabled = true;                       // varmistus
+            sr.sortingLayerName = tilesSortingLayer;
+            sr.sortingOrder = tilesSortingOrder;
+            sr.enabled = true;
 
             // 3) TileView init + kovitetut värit (täysi alpha)
             var tv = go.GetComponent<TileView>() ?? go.AddComponent<TileView>();
@@ -405,7 +373,6 @@ public class BoardView : MonoBehaviour
                                 : new Color(0.60f, 0.63f, 0.65f, 1f);
             tv.Init(c.X, c.Y, this, color);
 
-            // Jos prefabissa ei ole spriteä (fallback), täytä yksivärisellä (SpriteRenderer.color toimii ilman spriteäkin)
             if (sr.sprite == null)
                 sr.color = color;
 
@@ -413,15 +380,12 @@ public class BoardView : MonoBehaviour
         }
     }
 
-
-
     public void ClearHighlightsPublic()
     {
         foreach (var h in _highlights)
             if (h) { h.SetActive(false); _highlightPool.Add(h); }
         _highlights.Clear();
     }
-
 
     public void ShowHighlightsPublic(IEnumerable<Move> moves)
     {
@@ -431,7 +395,6 @@ public class BoardView : MonoBehaviour
         {
             GameObject go = null;
 
-            // ota poolista jos löytyy
             if (_highlightPool.Count > 0)
             {
                 var last = _highlightPool.Count - 1;
@@ -444,13 +407,11 @@ public class BoardView : MonoBehaviour
                 go = Instantiate(HighlightPrefab, HLParent);
             }
 
-            go.transform.position = new Vector3(m.To.X, m.To.Y, -0.1f);
+            go.transform.position = BoardToWorld(m.To.X, m.To.Y, -0.1f);
             go.transform.SetParent(HLParent, worldPositionStays: true);
             _highlights.Add(go);
         }
     }
-
-
 
     public bool CanHumanMove(PieceView pv)
     {
@@ -458,80 +419,83 @@ public class BoardView : MonoBehaviour
 
         bool isPlayersTurn = (pv.Owner == _state.CurrentPlayer);
 
-        // Normaalisti: et voi siirtää vihollista
         bool canMoveEnemy = (!isPlayersTurn) &&
                             (CanPlayerMoveEnemyPiece != null) &&
                             CanPlayerMoveEnemyPiece(pv);
 
-        // AI estää ihmistä mustan vuorolla, ELLEI erikoisitem anna toimia mustan vuorolla
         if (ai != null && _state.CurrentPlayer == "black" && !canMoveEnemy)
             return false;
 
         return isPlayersTurn || canMoveEnemy;
     }
 
+    // ---- Helper: force a piece view to correct world pos for current tileSize
+    private void SnapPieceViewToBoard(PieceView pv, int x, int y)
+    {
+        if (pv == null) return;
+        var p = pv.transform.position;
+        pv.transform.position = BoardToWorld(x, y, p.z);
+    }
 
     public bool TryDropPublic(PieceView pv, (int x, int y) from, (int x, int y) to, List<Move> cached)
     {
-        if (_state == null || _state.IsGameOver) return false; // jos sinulla on IsGameOver-lippu
 
+        // DEBUG/SAFETY: prefer mouse-based target cell to avoid collider/pivot bias
+        var mouseWorld = MouseWorldPublic(Camera.main);
+        var toFromMouse = WorldToBoardPublic(mouseWorld);
+
+        if (debugTrace)
+            Debug.Log($"[DROP] givenTo=({to.x},{to.y}) mouseTo=({toFromMouse.x},{toFromMouse.y}) mouseWorld={mouseWorld}");
+
+        to = toFromMouse;
+
+
+        if (_state == null || _state.IsGameOver) return false;
 
         try
         {
-            // --- perusguardit ---
             if (pv == null) { Debug.LogWarning("[Drop] pv == null"); return false; }
             if (_state == null) { Debug.LogWarning("[Drop] _state == null"); return false; }
             if (_rules == null) { Debug.LogWarning("[Drop] _rules == null"); return false; }
             if (!InBounds(from) || !InBounds(to)) { Debug.Log("[Drop] out of bounds"); return false; }
 
-            // varmista että lähdössä on edelleen sama view (vedon aikana tilanne ei muuttunut)
             if (!_pieceViews.TryGetValue((from.x, from.y), out var pvAtStart) || pvAtStart != pv)
             {
                 Debug.Log("[Drop] start view changed during drag");
                 return false;
             }
 
-            // --- hae siirto cachetista ---
             var move = cached?.FirstOrDefault(m => m.To.X == to.x && m.To.Y == to.y) ?? default;
             if (move.Equals(default(Move)))
-            {
-                // ei cache-osumaa -> ei hyväksytä
                 return false;
-            }
 
-            // --- null-safe laillisuustsekki tuoreena ---
             var fresh = _state.GenerateLegalMoves(new Coord(from.x, from.y), _rules) ?? Enumerable.Empty<Move>();
             bool stillOk = fresh.Any(m => m.To.X == to.x && m.To.Y == to.y);
             if (!stillOk) return false;
 
-            // --- mahdollinen kaappaus ---
             _pieceViews.TryGetValue((to.x, to.y), out var capturedPV);
 
-            // --- suorita siirto ---
             if (!_state.ApplyMove(move, _rules))
                 return false;
 
-            // --- päivitä view’t ---
             if (capturedPV != null) { Destroy(capturedPV.gameObject); _pieceViews.Remove((to.x, to.y)); }
+
             _pieceViews.Remove((from.x, from.y));
             pv.SetBoardPos(to.x, to.y);
+            SnapPieceViewToBoard(pv, to.x, to.y);
             _pieceViews[(to.x, to.y)] = pv;
 
-            return true; // OnTurnChanged hoitaa AI:n
+            return true;
         }
         catch (System.Exception ex)
         {
-            // ÄLÄ kaada koroutinia – palauta false → DragController tekee snapbackin
             Debug.LogError($"[Drop] TryDropPublic exception (returning false): {ex}");
             return false;
         }
     }
 
-
-
     void SyncAllPiecesFromState()
     {
-        // Tyhjennä vain nappulajuuri, älä koko BoardView’n lapsia
         for (int i = PiecesParent.childCount - 1; i >= 0; i--)
             Destroy(PiecesParent.GetChild(i).gameObject);
 
@@ -544,7 +508,6 @@ public class BoardView : MonoBehaviour
 
             if (!_defByType.TryGetValue(p.TypeName, out var def) || def == null)
             {
-                // Fallback: hae myös catalogista (sis. runtime registry)
                 if (catalog != null)
                 {
                     def = catalog.GetPieceById(p.TypeName);
@@ -562,55 +525,50 @@ public class BoardView : MonoBehaviour
                 }
             }
 
-
             var prefab = def.viewPrefabOverride != null ? def.viewPrefabOverride : PiecePrefab;
-            var go = Instantiate(prefab, new Vector3(c.X, c.Y, -1f), Quaternion.identity, PiecesParent);
+            var go = Instantiate(prefab, BoardToWorld(c.X, c.Y, -1f), Quaternion.identity, PiecesParent);
 
-            // SpriteRenderer – varmista että löytyy juuresta tai lapsesta
             var sr = go.GetComponent<SpriteRenderer>();
             if (sr == null) sr = go.GetComponentInChildren<SpriteRenderer>(true);
 
-            // ASETETAAN VARMASTI
             if (sr != null)
             {
-                sr.sprite = def.GetSpriteFor(p.Owner);  // <-- spriten asetus SO:sta
-                sr.color = Color.white;                 // <-- ei tummennuksia
-                sr.sortingOrder = 10;                   // <-- näkyy laatan päällä
-                                                        // (tarvittaessa sr.sortingLayerName = "Pieces"; jos käytät omia layereita)
+                sr.sprite = def.GetSpriteFor(p.Owner);
+                sr.color = Color.white;
+                sr.sortingOrder = 10;
             }
             else
             {
                 Debug.LogError("PiecePrefabista puuttuu SpriteRenderer. Lisää se juureen.", go);
             }
 
-            // PieceView (ilman tekstejä, se vain kantaa koordit)
             var pv = go.GetComponent<PieceView>();
             if (!pv) pv = go.AddComponent<PieceView>();
             pv.Init(c.X, c.Y, p.Owner, p.TypeName, Color.white);
 
+            // Force correct world position (in case prefab has offsets / changed scale)
+            SnapPieceViewToBoard(pv, c.X, c.Y);
+
             _pieceViews[(c.X, c.Y)] = pv;
 
-            // varmistetaan collider vedolle
+            // varmistetaan collider vedolle (tile-kokoinen, ei sprite.bounds)
             var col = go.GetComponent<Collider2D>();
-            if (col == null)
+            var box = col as BoxCollider2D;
+
+            if (box == null)
             {
-                var b = go.AddComponent<BoxCollider2D>();
-                // säädetään collider spriten mukaan (jos löytyy)
-                var sr2 = go.GetComponent<SpriteRenderer>() ?? go.GetComponentInChildren<SpriteRenderer>(true);
-                if (sr2 != null && sr2.sprite != null)
-                {
-                    b.size = sr2.sprite.bounds.size;
-                    b.offset = sr2.sprite.bounds.center;
-                }
+                if (col != null) Destroy(col);          // jos on joku muu collider
+                box = go.AddComponent<BoxCollider2D>();
             }
 
-            // varmistetaan drag handle
+            // Yksi ruutu = yksi collider
+            box.size = new Vector2(tileSize, tileSize);
+            box.offset = Vector2.zero;
+
             if (go.GetComponent<PieceDragHandle>() == null)
                 go.AddComponent<PieceDragHandle>();
         }
     }
-
-
 
     private List<Move> _cachedMoves = new();
 
@@ -625,7 +583,6 @@ public class BoardView : MonoBehaviour
         int ruleCount = 0;
         int moveCount = 0;
 
-        // Generoi siirrot suoraan resolverilta (JokerRule pääsee mukaan)
         foreach (var rule in _rules.GetRulesFor(me.TypeName))
         {
             if (rule == null) continue;
@@ -641,10 +598,8 @@ public class BoardView : MonoBehaviour
         Debug.Log($"[Moves] type={me.TypeName} rules={ruleCount} moves={moveCount}");
     }
 
-
     public void OnTileClicked(int x, int y)
     {
-        // 0) Estä ihmisen siirto AI:n vuorolla
         if (ai != null && _state.CurrentPlayer == "black")
         {
             Debug.Log("[CLICK] Ignored: AI's turn (black).");
@@ -659,17 +614,13 @@ public class BoardView : MonoBehaviour
 
         var clicked = new Coord(x, y);
 
-        // 1) VALINTA — ei valittua ruutua vielä
         if (!_selected.HasValue)
         {
             var piece = _state.Get(clicked);
             if (piece != null && piece.Owner == _state.CurrentPlayer)
             {
                 _selected = clicked;
-
-                // Luo/kirjoita varmuuden vuoksi uusi lista
                 _cachedMoves = GenerateMovesFrom(_state, clicked)?.ToList() ?? new List<Move>();
-
                 ShowHighlightsPublic(_cachedMoves);
             }
             else
@@ -681,21 +632,16 @@ public class BoardView : MonoBehaviour
             return;
         }
 
-        // 2) SIIRTOYRITYS — meillä on lähtöruutu
         var from = _selected.Value;
 
-        // Hae juuri se move joka vastaa klikattua kohdetta
         Move move = default;
         if (_cachedMoves != null && _cachedMoves.Count > 0)
             move = _cachedMoves.FirstOrDefault(m => m.To.Equals(clicked));
 
-        // Talteen mahdollinen syötävä view ENNEN ApplyMovea
         _pieceViews.TryGetValue((x, y), out var capturedPV);
 
-        // Yritä soveltaa siirtoa vain jos se oli cachetetuissa
         if (!move.Equals(default(Move)))
         {
-            // Pre-check: varmista että siirto on edelleen laillinen (cache voi vanheta)
             bool stillLegal = _state.GenerateLegalMoves(move.From, _rules).Any(m => m.To.Equals(move.To));
             if (!stillLegal)
             {
@@ -706,46 +652,38 @@ public class BoardView : MonoBehaviour
                 return;
             }
 
-            // SUORITA SIIRTO
             bool ok = _state.ApplyMove(move, _rules);
             if (ok)
             {
-                // a) Poista syöty view jos sellainen oli
                 if (capturedPV != null)
                 {
                     Destroy(capturedPV.gameObject);
                     _pieceViews.Remove((x, y));
                 }
 
-                // b) Päivitä siirtävän nappulan view (turvallisesti)
                 var keyFrom = (from.X, from.Y);
                 if (_pieceViews.TryGetValue(keyFrom, out var movingPV) && movingPV != null)
                 {
                     _pieceViews.Remove(keyFrom);
                     movingPV.SetBoardPos(x, y);
+                    SnapPieceViewToBoard(movingPV, x, y);
                     _pieceViews[(x, y)] = movingPV;
                 }
                 else
                 {
-                    // Jos view puuttuu (esim. AI ehti päivittää, tai muu epäsynkka) → kova sync
                     Debug.LogWarning("[CLICK] movingPV missing -> full SyncAllPiecesFromState()");
                     SyncAllPiecesFromState();
                 }
 
-                // c) Siivoukset
                 _selected = null;
                 _cachedMoves.Clear();
                 ClearHighlightsPublic();
-
-                // AI laukeaa OnTurnChangedissa; ei tehdä mitään tässä
                 return;
             }
 
-            // Siirto epäonnistui → jatketaan alas reselektioon
             Debug.Log("[CLICK] ApplyMove returned false; will try reselection.");
         }
 
-        // 3) EI LAILLINEN / OSUI OMAAN → vaihda valinta jos klikkasit omaa
         var clickedPiece = _state.Get(clicked);
         if (clickedPiece != null && clickedPiece.Owner == _state.CurrentPlayer)
         {
@@ -761,14 +699,10 @@ public class BoardView : MonoBehaviour
         }
     }
 
-
-
     private void HandleCapture(Coord at, Piece captured)
     {
-        // Muodostetaan avain samaan muotoon kuin _pieceViews käyttää
         var key = (at.X, at.Y);
 
-        // Jos tuossa ruudussa on vielä nappulan GameObject (sprite), tuhotaan se
         if (_pieceViews.TryGetValue(key, out var pv))
         {
             Destroy(pv.gameObject);
@@ -776,7 +710,6 @@ public class BoardView : MonoBehaviour
         }
     }
 
-    // hakee säännöt PieceDefSO:staa
     private sealed class DefRegistryRulesResolver : IRulesResolver
     {
         private readonly Dictionary<string, PieceDefSO> _defs;
@@ -805,7 +738,6 @@ public class BoardView : MonoBehaviour
 
     private void TriggerAiIfNeeded()
     {
-        // AI vain jos mustan vuoro ja ai != null
         if (ai != null && _state.CurrentPlayer == "black")
             StartCoroutine(DoAiMove());
     }
@@ -817,7 +749,6 @@ public class BoardView : MonoBehaviour
         Trace($"SNAP[{tag}] cur={_state.CurrentPlayer} moves: W={w} B={b} ai={(ai == null ? "null" : ai.GetType().Name)} _aiRunning={_aiRunning} last={_state.LastMoveEffectiveTypeName ?? "∅"}");
     }
 
-
     private IEnumerator DoAiMove()
     {
         _aiRunning = true;
@@ -825,7 +756,6 @@ public class BoardView : MonoBehaviour
         yield return new WaitForSeconds(0.3f);
         if (ai == null) { Trace("DoAiMove: ai==null -> abort"); _aiRunning = false; yield break; }
 
-        // KATSO montako siirtoa AI:lla oikeasti on resolverilla
         var options = _state.AllMoves("black", _rules).ToList();
         Trace($"DoAiMove: options.Count={options.Count}");
 
@@ -857,7 +787,6 @@ public class BoardView : MonoBehaviour
 
     bool _teardownDone;
 
-    // Luo puuttuvat rootit automaattisesti
     void EnsureRuntimeRoots()
     {
         Transform Make(string name)
@@ -878,10 +807,8 @@ public class BoardView : MonoBehaviour
         if (_teardownDone) return;
         _teardownDone = true;
 
-        // 1) pysäytä boardiin liittyvät koroutinet
         try { StopAllCoroutines(); } catch { }
 
-        // 2) irrota eventit _statelta (jos vielä kiinni)
         try
         {
             if (_state != null)
@@ -892,10 +819,8 @@ public class BoardView : MonoBehaviour
         }
         catch { }
 
-        // 3) tyhjennä highlightit
         try { ClearHighlightsPublic(); } catch { }
 
-        // 4) tuhoa kaikki runtime-lapset juurista
         void DestroyChildrenOf(Transform root)
         {
             if (root == null) return;
@@ -908,7 +833,6 @@ public class BoardView : MonoBehaviour
         DestroyChildrenOf(tilesRoot);
         DestroyChildrenOf(overlaysRoot);
 
-        // 5) tyhjennä välimuistit / viitteet
         _pieceViews.Clear();
         _tiles.Clear();
         _highlights.Clear();
@@ -919,19 +843,14 @@ public class BoardView : MonoBehaviour
         _rules = null;
         _state = null;
 
-        // 6) disabloi ja haluttaessa tuhoa oma GO
         enabled = false;
         if (destroySelfGO)
             Destroy(gameObject);
     }
 
-    // Pieni apu: valitse parent aina rootista jos se on olemassa
     Transform PiecesParent => piecesRoot != null ? piecesRoot : transform;
     Transform TilesParent => tilesRoot != null ? tilesRoot : transform;
     Transform HLParent => highlightsRoot != null ? highlightsRoot : transform;
-
-
-
 
     public void RegisterRuntimeDef(PieceDefSO def)
     {
@@ -939,6 +858,4 @@ public class BoardView : MonoBehaviour
         _defByType[def.typeName] = def;
         Debug.Log($"[BoardView] Registered runtime def: {def.typeName}");
     }
-
 }
-

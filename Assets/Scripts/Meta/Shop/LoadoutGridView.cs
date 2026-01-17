@@ -115,7 +115,7 @@ public class LoadoutGridView : MonoBehaviour
             if (grid.cellSize.x < 8f || grid.cellSize.y < 8f)
                 grid.cellSize = new Vector2(80, 80);
             if (grid.spacing == Vector2.zero)
-                grid.spacing = new Vector2(4, 4);
+                grid.spacing = new Vector2(0, 0);
         }
 
         // Tyhjennä

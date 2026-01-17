@@ -116,12 +116,12 @@ TextureImporter:
       name: BlackDabbaba_0
       rect:
         serializedVersion: 2
-        x: 7
-        y: 7
-        width: 50
-        height: 55
+        x: 3
+        y: 1
+        width: 31
+        height: 43
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -138,7 +138,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 68643e36fc1a6e9489fbcf602fb86d6d
     internalID: 0
     vertices: []
     indices: 

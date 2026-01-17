@@ -116,12 +116,12 @@ TextureImporter:
       name: BlackNightmare_0
       rect:
         serializedVersion: 2
-        x: 7
+        x: 4
         y: 0
-        width: 51
-        height: 64
+        width: 31
+        height: 60
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -134,11 +134,33 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
+    - serializedVersion: 2
+      name: BlackNightmare_1
+      rect:
+        serializedVersion: 2
+        x: 4
+        y: 0
+        width: 31
+        height: 60
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: f9e2369689b3c5748b2f8dde6fa759e7
+      internalID: 1134807869
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 2734b79d09f68754cb36278f328caf0c
     internalID: 0
     vertices: []
     indices: 
@@ -149,6 +171,7 @@ TextureImporter:
       entries: []
     nameFileIdTable:
       BlackNightmare_0: 4652248360506713026
+      BlackNightmare_1: 1134807869
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

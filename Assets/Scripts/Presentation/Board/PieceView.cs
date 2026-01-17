@@ -15,7 +15,7 @@ public class PieceView : MonoBehaviour
 
 
     [Header("Collider")]
-    [SerializeField] float colliderPadding = 0.25f; // lis‰‰ osuma-aluetta
+    [SerializeField] float colliderPadding = 0.01f; // lis‰‰ osuma-aluetta
     [SerializeField] bool colliderIsTrigger = true; // dragissa yleens‰ paras
 
     TextMeshPro _tmp3D;

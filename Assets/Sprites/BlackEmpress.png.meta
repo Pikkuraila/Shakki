@@ -116,12 +116,12 @@ TextureImporter:
       name: BlackEmpress_0
       rect:
         serializedVersion: 2
-        x: 6
+        x: 4
         y: 0
-        width: 50
-        height: 64
+        width: 32
+        height: 50
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -138,7 +138,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 3efc70ba1e89be0459f250aaed3d59cc
     internalID: 0
     vertices: []
     indices: 

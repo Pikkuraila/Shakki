@@ -43,7 +43,19 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private PieceDefSO amalgamBaseDef;              // Amalgam.asset (typeName="Amalgam")
 
 
+    public enum MacroBuildMode
+    {
+        UsePreset,
+        GenerateRandom
+    }
+
     [Header("Macro")]
+    [SerializeField] private MacroBuildMode macroBuildMode = MacroBuildMode.GenerateRandom;
+
+    // kun mode=UsePreset
+    [SerializeField] private MacroMapSO macroPreset;
+
+    // nykyiset:
     [SerializeField] private MacroMapSO macroMap;
     [SerializeField] private MacroBoardView macroView;
     [SerializeField] private MacroMapGeneratorSO macroGenerator;
@@ -154,18 +166,38 @@ public sealed class RunController : MonoBehaviour
 
     private void StartRun()
     {
-        BuildRules(); // varmistus, jos haluat, tai jätä kuten on – tämä voi myös olla jo kutsuttu Startissa
+        BuildRules();
 
-
-        if (macroGenerator != null)
+        // 1) Valitse map lähde
+        if (macroBuildMode == MacroBuildMode.UsePreset)
         {
-            int seed = seedOverride ?? UnityEngine.Random.Range(int.MinValue, int.MaxValue);
-            macroMap = macroGenerator.Generate(seed);
-            Debug.Log($"[Run] Generated macroMap rows={macroMap.rows} cols={macroMap.columns} tiles={macroMap.tiles?.Length}");
-
+            if (macroPreset == null)
+            {
+                Debug.LogWarning("[Run] MacroBuildMode=UsePreset but macroPreset is NULL -> fallback to GenerateRandom.");
+                macroBuildMode = MacroBuildMode.GenerateRandom;
+            }
+            else
+            {
+                macroMap = CloneMacroMap(macroPreset);
+                Debug.Log($"[Run] Using macro PRESET '{macroPreset.name}' rows={macroMap.rows} cols={macroMap.columns} tiles={macroMap.tiles?.Length}");
+            }
         }
 
+        if (macroBuildMode == MacroBuildMode.GenerateRandom)
+        {
+            if (macroGenerator != null)
+            {
+                int seed = seedOverride ?? UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+                macroMap = macroGenerator.Generate(seed);
+                Debug.Log($"[Run] Generated macroMap seed={seed} rows={macroMap.rows} cols={macroMap.columns} tiles={macroMap.tiles?.Length}");
+            }
+            else
+            {
+                Debug.LogWarning("[Run] macroGenerator is NULL -> cannot generate. Will use existing macroMap reference.");
+            }
+        }
 
+        // 2) start index kuten ennen
         var ps = PlayerService.Instance;
         if (ps != null)
         {
@@ -175,7 +207,7 @@ public sealed class RunController : MonoBehaviour
             if (macroMap != null)
             {
                 int startRow = 0;
-                int startCol = macroMap.columns / 2; // keskikolumni (3 -> 1)
+                int startCol = macroMap.columns / 2;
                 startIndex = macroMap.GetIndex(startRow, startCol);
             }
 
@@ -185,6 +217,27 @@ public sealed class RunController : MonoBehaviour
 
         EnterMacroPhase();
     }
+
+    private static MacroMapSO CloneMacroMap(MacroMapSO src)
+    {
+        var m = ScriptableObject.CreateInstance<MacroMapSO>();
+        m.rows = Mathf.Max(1, src.rows);
+        m.columns = Mathf.Max(1, src.columns);
+
+        int n = m.rows * m.columns;
+        m.tiles = new MacroTileDef[n];
+
+        if (src.tiles != null)
+        {
+            int copy = Mathf.Min(src.tiles.Length, n);
+            for (int i = 0; i < copy; i++)
+                m.tiles[i] = src.tiles[i];
+        }
+
+        return m;
+    }
+
+
 
 
     /// <summary>
