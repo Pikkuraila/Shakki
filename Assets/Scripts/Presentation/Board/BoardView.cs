@@ -55,6 +55,10 @@ public class BoardView : MonoBehaviour
 
     private IRulesResolver _rules;
 
+    [Header("Inspect/External highlight lock")]
+    public bool ExternalHighlightsLock;
+
+
     [Header("Prefabs")]
     public GameObject TileLightPrefab;
     public GameObject TileDarkPrefab;
@@ -182,10 +186,9 @@ public class BoardView : MonoBehaviour
     private void Update()
     {
         if (_state == null || _rules == null) return;
-
-        // Dragatessa ei hover-highlightteja (drag hoitaa omat highlightit)
         if (Input.GetMouseButton(0)) return;
 
+        if (ExternalHighlightsLock) return; // <---
         UpdateHoverIntel();
     }
 

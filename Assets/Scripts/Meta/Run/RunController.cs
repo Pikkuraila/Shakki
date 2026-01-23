@@ -783,6 +783,104 @@ public sealed class RunController : MonoBehaviour
             StartNewEncounter();
     }
 
+    // RunController.cs
+    private static void EnforceBlackKingInDropSpecIfManyPieces(EnemySpec spec, int threshold = 5)
+    {
+        if (spec == null) return;
+
+        // Tämä koskee nimenomaan slot-pohjaisia / drop-pohjaisia speksejä
+        if (spec.mode != EnemySpec.Mode.Slots) return;
+
+        if (spec.blackSlots == null)
+            spec.blackSlots = new List<string>();
+
+        int planned = 0;
+        for (int i = 0; i < spec.blackSlots.Count; i++)
+        {
+            if (!string.IsNullOrEmpty(spec.blackSlots[i]))
+                planned++;
+        }
+
+        if (planned < threshold) return;
+
+        bool hasKing = false;
+        for (int i = 0; i < spec.blackSlots.Count; i++)
+        {
+            if (spec.blackSlots[i] == "King") { hasKing = true; break; }
+        }
+
+        if (!hasKing)
+        {
+            // Laita King listan alkuun niin “tärkein” palanen tulee mukaan varmasti.
+            spec.blackSlots.Insert(0, "King");
+            Debug.LogWarning($"[RunController] DropSpec enforced: plannedBlack={planned} >= {threshold} -> inserted black King into EnemySpec.");
+        }
+    }
+
+
+    private static void ForceBlackKingToBackRank(EncounterSO enc, int boardWidth, int boardHeight)
+    {
+        if (enc == null || enc.spawns == null || enc.spawns.Count == 0) return;
+
+        // 1) Etsi black king spawn indeksinä (Spawn on struct)
+        int kingIndex = -1;
+        for (int i = 0; i < enc.spawns.Count; i++)
+        {
+            var s = enc.spawns[i];
+            if (s.owner == "black" && s.pieceId == "King")
+            {
+                kingIndex = i;
+                break;
+            }
+        }
+        if (kingIndex < 0) return;
+
+        // ✅ relativeRanks: back rank on y=0 myös mustalle
+        int targetY = enc.relativeRanks ? 0 : (boardHeight - 1);
+
+        // 2) Kerää varatut koordit
+        // relativeRanks: vertaile vain mustien kesken (white on eri avaruudessa)
+        var occupied = new HashSet<(int x, int y)>();
+        for (int i = 0; i < enc.spawns.Count; i++)
+        {
+            if (i == kingIndex) continue;
+            var s = enc.spawns[i];
+
+            if (enc.relativeRanks && s.owner != "black")
+                continue;
+
+            occupied.Add((s.x, s.y));
+        }
+
+        // 3) Valitse vapaa x back-rankilta (center-out)
+        int mid = boardWidth / 2;
+        int chosenX = -1;
+
+        for (int dx = 0; dx < boardWidth; dx++)
+        {
+            int x1 = mid - dx;
+            int x2 = mid + dx;
+
+            if (x1 >= 0 && x1 < boardWidth && !occupied.Contains((x1, targetY))) { chosenX = x1; break; }
+            if (x2 >= 0 && x2 < boardWidth && !occupied.Contains((x2, targetY))) { chosenX = x2; break; }
+        }
+
+        if (chosenX < 0)
+        {
+            Debug.LogWarning("[RunController] Wanted to force black King to back rank but no free slot on that rank. Leaving as-is.");
+            return;
+        }
+
+        // 4) Päivitä spawn (struct → writeback)
+        var king = enc.spawns[kingIndex];
+        king.x = chosenX;
+        king.y = targetY;
+        enc.spawns[kingIndex] = king;
+
+        Debug.Log($"[RunController] Forced black King to back rank (relativeRanks={enc.relativeRanks}) at ({chosenX},{targetY}).");
+    }
+
+
 
 
     // ---------- ENCOUNTERIN RAKENNUS ----------
@@ -822,6 +920,8 @@ public sealed class RunController : MonoBehaviour
             var spec = _pendingEnemySpecOverride;
             _pendingEnemySpecOverride = null;
 
+            EnforceBlackKingInDropSpecIfManyPieces(spec, threshold: 5);
+
             if (slotMap != null && PlayerService.Instance != null && PlayerService.Instance.Data != null)
             {
                 EnsureSlotsOnce(16);
@@ -837,8 +937,9 @@ public sealed class RunController : MonoBehaviour
                     implicitKingId: "King",
                     totalSlots: 16
                 );
-                // ✅ BUDGET-BATTLE = KINGLESS (annihilation)
-                enc.requireBlackKing = false;
+                // ✅ Budget-battle on kingless, ELLEI mustia ole >=5 (silloin aina king)
+                enc.requireBlackKing = (spec.mode == EnemySpec.Mode.Slots && spec.blackSlots != null && spec.blackSlots.Count(id => !string.IsNullOrEmpty(id)) >= 5);
+
 
                 Debug.Log($"[RunController] Built encounter from player loadout + pending EnemySpec DROP (mode={spec.mode}).");
             }
@@ -906,6 +1007,8 @@ public sealed class RunController : MonoBehaviour
             {
                 var spec = enemySpec ?? new EnemySpec { mode = EnemySpec.Mode.Classic };
 
+                EnforceBlackKingInDropSpecIfManyPieces(spec, threshold: 5);
+
                 enc = LoadoutAssembler.BuildFromPlayerDataDrop(
                     pdata,
                     slotMap,
@@ -943,6 +1046,8 @@ public sealed class RunController : MonoBehaviour
         // (ÄLÄ enää pakota aina true täällä.)
         // Jos haluat yleisdefaultin budget-battleille: aseta se EnemySpecissä/Assemblerissa.
         // enc.fillBlackPawnsAtY ja enc.blackPawnsY jätetään Encounter/Assemblerin vastuulle.
+
+        ForceBlackKingToBackRank(enc, _state.Width, _state.Height);
 
         // 3) Sijoittele nappulat
         EncounterLoader.Apply(_state, enc, catalog);

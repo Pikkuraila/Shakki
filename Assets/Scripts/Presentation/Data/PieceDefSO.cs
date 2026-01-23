@@ -1,4 +1,4 @@
-﻿// Assets/Scripts/Core/PieceDefSO.cs (tai missä tää nyt on)
+﻿// Assets/Scripts/Core/PieceDefSO.cs
 using UnityEngine;
 using System.Linq;
 using Shakki.Core;
@@ -10,7 +10,7 @@ public class PieceDefSO : ScriptableObject
     public string typeName = "Rook";
 
     [Header("Economy")]
-    [Min(0)] public int cost = 1;   // ✅ uusi
+    [Min(0)] public int cost = 1;
 
     [Header("Rules")]
     public MoveRuleSO[] rules;
@@ -18,11 +18,15 @@ public class PieceDefSO : ScriptableObject
     [Header("Tags")]
     public PieceTag tags = PieceTag.None;
 
-    [Header("Visuals")]
+    [Header("Visuals (Board)")]
     public Sprite whiteSprite;
     public Sprite blackSprite;
 
     public GameObject viewPrefabOverride;
+
+    [Header("Inspect (Portrait)")]
+    [Tooltip("Erillinen portrait-kuva inspect-paneeliin. Jos tyhjä, fallbackaa whiteSpriteen.")]
+    public Sprite portraitSprite;
 
     public Piece Build(string owner)
     {
@@ -33,4 +37,8 @@ public class PieceDefSO : ScriptableObject
 
     public Sprite GetSpriteFor(string owner)
         => owner == "white" ? whiteSprite : blackSprite;
+
+    // ✅ Inspect-paneelin ensisijainen kuva
+    public Sprite GetPortrait()
+        => portraitSprite != null ? portraitSprite : whiteSprite;
 }

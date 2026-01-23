@@ -17,6 +17,10 @@ public class ShopItemDefSO : ScriptableObject
     [Header("Tags")]
     public string[] tags;                  // vapaaehtoiset filtterit (esim. "offense", "defense", "rare")
 
+    [Header("Inspect")]
+    public Sprite overridePortrait;
+
+
     public int GetPrice(PlayerData data)
     {
         // Jos joskus haluat dynaamista hinnoittelua, laita logiikka tähän
