@@ -1,6 +1,6 @@
+ï»¿using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 namespace Shakki.Presentation.Inspect
 {
@@ -14,24 +14,21 @@ namespace Shakki.Presentation.Inspect
         [SerializeField] private TMP_Text nameText;
         [SerializeField] private TMP_Text loreText;
 
+        [Header("Tags")]
         [SerializeField] private Transform tagsRoot;
-        [SerializeField] private TMP_Text tagChipPrefab;
+        [SerializeField] private TagChipView tagChipPrefab;
+        [SerializeField] private TagStyleRegistrySO tagStyles;
+        [SerializeField] private Color unknownTagBg = new Color(0.2f, 0.2f, 0.2f, 0.9f);
 
+        [Header("Info lines (optional)")]
         [SerializeField] private Transform infoRoot;
         [SerializeField] private TMP_Text infoRowPrefab;
-
-        [Header("Optional tags UI (voit jättää tyhjäksi nyt)")]
-        // TODO: tagsRoot + tagPrefab jos haluat chipit
-        // [SerializeField] private Transform tagsRoot;
 
         [Header("Fallback")]
         [SerializeField] private Sprite fallbackPortrait;
 
         public void Render(InspectData data)
         {
-            Debug.Log($"[InspectPanelView] Render called on '{name}' active={gameObject.activeInHierarchy} dataTitle='{data?.title}' dataPortrait={(data?.portrait ? data.portrait.name : "NULL")}");
-            Debug.Log($"[InspectPanelView] refs: nameText={(nameText ? "OK" : "NULL")} portraitImage={(portraitImage ? "OK" : "NULL")} frame={(portraitFrameImage ? "OK" : "NULL")}");
-
             if (data == null)
             {
                 if (nameText) nameText.text = "";
@@ -42,6 +39,8 @@ namespace Shakki.Presentation.Inspect
                     portraitImage.enabled = fallbackPortrait != null;
                     portraitImage.preserveAspect = true;
                 }
+                ClearChildren(tagsRoot);
+                ClearChildren(infoRoot);
                 return;
             }
 
@@ -55,30 +54,39 @@ namespace Shakki.Presentation.Inspect
                 portraitImage.preserveAspect = true;
             }
 
-            // Frame on aina päällä jos siihen on asetettu sprite inspectorissa.
             if (portraitFrameImage)
             {
                 portraitFrameImage.enabled = portraitFrameImage.sprite != null;
                 portraitFrameImage.preserveAspect = true;
             }
 
-            // TODO tags: instantiate chipit data.tags perusteella
-
-            // TAGS
+            // TAG CHIPS
             ClearChildren(tagsRoot);
-            if (data.tags != null && data.tags.Length > 0 && tagsRoot != null && tagChipPrefab != null)
+            if (tagsRoot != null && tagChipPrefab != null && data.tags != null)
             {
-                foreach (var t in data.tags)
+                for (int i = 0; i < data.tags.Length; i++)
                 {
-                    if (string.IsNullOrWhiteSpace(t)) continue;
+                    var raw = data.tags[i];
+                    if (string.IsNullOrWhiteSpace(raw)) continue;
+
+                    var style = tagStyles != null
+                        ? tagStyles.GetOrDefault(raw, unknownTagBg)
+                        : default;
+
+                    var label = (tagStyles != null && !string.IsNullOrWhiteSpace(style.label))
+                        ? style.label
+                        : raw;
+
+                    var bg = (tagStyles != null) ? style.background : unknownTagBg;
+
                     var chip = Instantiate(tagChipPrefab, tagsRoot);
-                    chip.text = t;
+                    chip.Bind(label, bg);
                 }
             }
 
-            // INFO LINES
+            // INFO LINES (optional)
             ClearChildren(infoRoot);
-            if (data.infoLines != null && data.infoLines.Length > 0 && infoRoot != null && infoRowPrefab != null)
+            if (infoRoot != null && infoRowPrefab != null && data.infoLines != null)
             {
                 foreach (var line in data.infoLines)
                 {
@@ -87,10 +95,9 @@ namespace Shakki.Presentation.Inspect
                     row.text = line;
                 }
             }
-
         }
 
-        void ClearChildren(Transform root)
+        static void ClearChildren(Transform root)
         {
             if (root == null) return;
             for (int i = root.childCount - 1; i >= 0; i--)

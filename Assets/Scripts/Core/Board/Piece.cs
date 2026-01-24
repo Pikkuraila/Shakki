@@ -2,17 +2,7 @@ using System.Collections.Generic;
 
 namespace Shakki.Core
 {
-    [System.Flags]
-    public enum PieceTag
-    {
-        None = 0,
-        EnPassant = 1 << 0,
-        // Voit lisätä tänne muitakin jos haluat:
-        // Flying     = 1 << 1,
-        // Boss       = 1 << 2,
-        // Healer     = 1 << 3,
-    }
-
+    
     public sealed class Piece
     {
         public string Owner { get; }

@@ -1,4 +1,6 @@
-﻿using System.Linq;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Shakki.Core;
 
@@ -83,43 +85,61 @@ namespace Shakki.Presentation.Inspect
 
         private InspectData BuildFromPieceDef(PieceDefSO def)
         {
+            var computed = def.GetComputedTags();
+            Debug.Log($"[Inspect] {def.typeName} identity={def.identityTags} computed={computed} rules={(def.rules != null ? def.rules.Length : 0)}");
+
+
             if (def == null) return null;
 
-            // Tags: enum -> string listaksi
-            string[] tags =
-                def.tags == 0
-                    ? System.Array.Empty<string>()
-                    : def.tags.ToString()
-                              .Split(',')
-                              .Select(s => s.Trim())
-                              .Where(s => !string.IsNullOrEmpty(s))
-                              .ToArray();
+            var tags = new List<string>(16);
 
-            // Info: rules SO -nimet (parempi kuin ei mitään)
-            string[] info =
-                (def.rules == null || def.rules.Length == 0)
-                    ? new[] { "No move rules" }
-                    : def.rules
-                        .Where(r => r != null)
-                        .Select(r => r.name)
-                        .Distinct()
-                        .ToArray();
+            AddIdentityTags(def.identityTags, tags);
+            AddPieceTags(def.GetComputedTags(), tags);
+
+            // dedupe + siisti järjestys
+            var tagArr = tags
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s)
+                .ToArray();
 
             return new InspectData
             {
                 id = def.typeName,
-                title = def.typeName,
-
-                // ✅ ensisijaisesti erillinen portrait, fallback board-spriteen
-                portrait = def.portraitSprite != null ? def.portraitSprite : def.whiteSprite,
-
-                tags = tags,
-                infoLines = info,
-                lore = ""
+                title = def.GetDisplayName(),
+                portrait = def.GetPortrait(),
+                tags = tagArr,
+                lore = def.GetLore(),
+                infoLines = Array.Empty<string>() // jos et käytä infolines
             };
-
         }
 
+        private static void AddIdentityTags(IdentityTag value, List<string> outTags)
+        {
+            if (outTags == null) return;
+
+            // Jos IdentityTag:ssä on None=0, skipataan se automaattisesti.
+            foreach (IdentityTag flag in Enum.GetValues(typeof(IdentityTag)))
+            {
+                if (flag == 0) continue;
+                if ((value & flag) != 0)
+                    outTags.Add(flag.ToString());
+            }
+        }
+
+
+        private static void AddPieceTags(PieceTag value, List<string> outTags)
+        {
+            if (outTags == null) return;
+
+            foreach (PieceTag flag in Enum.GetValues(typeof(PieceTag)))
+            {
+                if (flag == 0) continue;
+                if ((value & flag) != 0)
+                    outTags.Add(flag.ToString());
+            }
+        }
 
         // Helperit muille kutsua (valinnainen)
         public void InspectPieceDef(PieceDefSO def)

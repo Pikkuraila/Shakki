@@ -2,6 +2,7 @@
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
+using Shakki.Core;
 
 public sealed class AlchemistEncounterView : MonoBehaviour
 {
@@ -92,7 +93,48 @@ public sealed class AlchemistEncounterView : MonoBehaviour
         Bind(outputSlot, SlotKind.AlchemistOutput, 0);
     }
 
+    private bool IsLiving(PieceDefSO def)
+    {
+        if (def == null) return false;
+        return (def.identityTags & IdentityTag.Living) != 0;
+    }
 
+
+    private bool IsLivingId(string pieceId)
+    {
+        if (catalog == null || string.IsNullOrEmpty(pieceId)) return false;
+        var def = catalog.GetPieceById(pieceId);
+        return IsLiving(def);
+    }
+
+    private bool CanAcceptIntoFusionInputs(UIDraggablePiece drag, out string reason)
+    {
+        reason = null;
+
+        if (drag == null) { reason = "drag null"; return false; }
+
+        // hyväksy vain loadoutista tuleva piece
+        if (drag.originKind != SlotKind.Loadout) { reason = "not from loadout"; return false; }
+        if (drag.payloadKind != DragPayloadKind.Piece) { reason = "not a piece"; return false; }
+
+        // payloadId on se mitä halutaan käyttää (loadoutissa se on typeName)
+        var pieceId = drag.payloadId;
+        if (string.IsNullOrEmpty(pieceId))
+        {
+            // fallback jos jostain syystä payloadId puuttuu
+            pieceId = drag.typeName;
+        }
+
+        if (string.IsNullOrEmpty(pieceId)) { reason = "missing piece id"; return false; }
+
+        if (!IsLivingId(pieceId))
+        {
+            reason = "only Living pieces can be placed into fusion inputs";
+            return false;
+        }
+
+        return true;
+    }
 
     public void ClearAll()
     {
@@ -126,7 +168,22 @@ public sealed class AlchemistEncounterView : MonoBehaviour
         if (drag.originKind != SlotKind.Loadout || drag.payloadKind != DragPayloadKind.Piece)
             return;
 
-        int srcUi = drag.originIndex;                 // originIndex = UI-index
+        // ✅ vain Living-pieceet saa mennä inputteihin
+        var pieceId = !string.IsNullOrEmpty(drag.payloadId) ? drag.payloadId : drag.typeName;
+        if (string.IsNullOrEmpty(pieceId) || !IsLivingId(pieceId))
+        {
+            Debug.Log($"[Alchemist] Reject input drop: requires Living. id={pieceId}");
+            return;
+        }
+
+        // slotin pitää olla A(0) tai B(1)
+        if (slot.index != 0 && slot.index != 1) return;
+
+        // jos inputissa jo jotain, älä hyväksy (ei jumitusta, koska ei syödä mitään)
+        if (slot.index == 0 && !string.IsNullOrEmpty(inputA)) return;
+        if (slot.index == 1 && !string.IsNullOrEmpty(inputB)) return;
+
+        int srcUi = drag.originIndex;
         int srcData = loadoutView.UiToDataIndex(srcUi);
 
         var pd = loadoutView.playerService.Data;
@@ -138,9 +195,16 @@ public sealed class AlchemistEncounterView : MonoBehaviour
 
         if (string.IsNullOrEmpty(id)) return;
 
+        // ✅ varmistus myös datasta
+        if (!IsLivingId(id))
+        {
+            Debug.Log($"[Alchemist] Reject input drop (non-living by data id): {id}");
+            return;
+        }
+
         // aseta input-state
         if (slot.index == 0) inputA = id;
-        else if (slot.index == 1) inputB = id;
+        else inputB = id;
 
         // tyhjennä lähde loadoutista
         pd.loadoutSlots[srcData] = "";
@@ -150,12 +214,14 @@ public sealed class AlchemistEncounterView : MonoBehaviour
         RedrawInputs();
         TryActivateFusion();
 
-        // kuluta drag-kopio (ettei se snapbackaa tms)
+        // kuluta drag-kopio
         drag.MarkConsumed(-1);
 
         // päivitä loadout
         loadoutView.RefreshAll();
     }
+
+
 
 
 
@@ -236,6 +302,13 @@ public sealed class AlchemistEncounterView : MonoBehaviour
         var bDef = catalog.GetPieceById(inputB);
         if (aDef == null || bDef == null) { Debug.LogWarning("[Alchemist] aDef/bDef null"); return; }
 
+        // ✅ safety: myös tässä varmistus (vaikka drop jo estää)
+        if (!IsLiving(aDef) || !IsLiving(bDef))
+        {
+            Debug.Log("[Alchemist] Fusion blocked: ingredients must be Living.");
+            return;
+        }
+
         // 1) Uniikki ID (run-aikainen)
         var runtimeId = $"Amalgam_{aDef.typeName}_{bDef.typeName}_{System.Guid.NewGuid():N}";
 
@@ -244,25 +317,28 @@ public sealed class AlchemistEncounterView : MonoBehaviour
         runtime.name = runtimeId;
         runtime.typeName = runtimeId;
 
-        // 3) Spritet varmistus
+        // ✅ identity is ALWAYS Amalgam (ei peri rotuja)
+        runtime.identityTags = IdentityTag.Amalgam | IdentityTag.Living;
+
+        // 3) Spritet
         runtime.whiteSprite = baseAmalgamDef.whiteSprite;
         runtime.blackSprite = baseAmalgamDef.blackSprite;
 
-        // 4) Tags + rules merge (null-safe)
-        runtime.tags = aDef.tags | bDef.tags;
-
+        // 4) Rules merge (sis. baseAmalgamDef.rules jos haluat “amalgam tag rule” tms)
+        var baseRules = baseAmalgamDef.rules ?? System.Array.Empty<MoveRuleSO>();
         var rulesA = aDef.rules ?? System.Array.Empty<MoveRuleSO>();
         var rulesB = bDef.rules ?? System.Array.Empty<MoveRuleSO>();
 
-        runtime.rules = rulesA
+        runtime.rules = baseRules
+            .Concat(rulesA)
             .Concat(rulesB)
             .Where(r => r != null)
             .Distinct()
             .ToArray();
 
-        Debug.Log($"[Alchemist] Runtime rules merged: id={runtimeId} rules={runtime.rules.Length} (A={rulesA.Length}, B={rulesB.Length})");
+        Debug.Log($"[Alchemist] Runtime rules merged: id={runtimeId} rules={runtime.rules.Length} (base={baseRules.Length} A={rulesA.Length}, B={rulesB.Length})");
 
-        // ✅ rekisteröi suoraan injektoituun registryyn (ei FindObjectOfType)
+        // ✅ rekisteröi runtime def rules-resolveriin
         if (_runtimeRegistry != null)
         {
             _runtimeRegistry.RegisterOrReplace(runtime);
@@ -273,11 +349,8 @@ public sealed class AlchemistEncounterView : MonoBehaviour
             Debug.LogWarning("[Alchemist] _runtimeRegistry is NULL – runtime rules not registered (expect rules=0 / moves=0).");
         }
 
-
         // 5) Rekisteröi runtime def catalogiin
         catalog.RegisterRuntimePiece(runtime);
-
-        Debug.Log($"[Alchemist] runtimeId={runtimeId} spriteW={(runtime.whiteSprite ? runtime.whiteSprite.name : "NULL")}");
 
         // 6) Piirrä output draggable
         ClearChildren(outputSlot);
@@ -285,6 +358,8 @@ public sealed class AlchemistEncounterView : MonoBehaviour
 
         _outputReady = true;
     }
+
+
 
 
 
