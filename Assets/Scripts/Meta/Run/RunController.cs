@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using Shakki.Core;
 using System.Linq;
@@ -42,6 +43,8 @@ public sealed class RunController : MonoBehaviour
     [Header("Alchemist Data")]
     [SerializeField] private PieceDefSO amalgamBaseDef;              // Amalgam.asset (typeName="Amalgam")
 
+    [SerializeField] private DragController dragController;
+    private bool _returningToMacro;
 
     public enum MacroBuildMode
     {
@@ -245,49 +248,97 @@ public sealed class RunController : MonoBehaviour
     /// </summary>
     private void EnterMacroPhase()
     {
-
         UIDraggablePiece.s_IsDraggingAny = false;
-
-        var piece = macroView.macroPiece;
-        if (piece != null)
-        {
-            piece.SendMessage("ForceStopDrag", SendMessageOptions.DontRequireReceiver);
-        }
-
-
-
-        Debug.Log("[RunController] EnterMacroPhase()");
-
-        // Tyhjennä DragLayer varmuuden vuoksi
-        var canvas = macroView.GetComponentInParent<Canvas>();
-        if (canvas != null)
-        {
-            var dragLayer = canvas.transform.Find("DragLayer");
-            if (dragLayer != null)
-            {
-                Debug.Log("[MacroPhase] Clearing DragLayer children");
-                for (int i = dragLayer.childCount - 1; i >= 0; i--)
-                {
-                    Destroy(dragLayer.GetChild(i).gameObject);
-                }
-            }
-        }
-
-
-        var pd = PlayerService.Instance.Data;
-
-        if (shopPanel != null) shopPanel.SetActive(false);
-        if (boardView != null)
-        {
-            boardView.gameObject.SetActive(false);
-            boardView.enabled = false;
-        }
 
         if (macroView == null || macroMap == null)
         {
             Debug.LogWarning("[RunController] MacroView/MacroMap puuttuu, fallback → StartNewEncounter.");
             StartNewEncounter();
             return;
+        }
+
+        var pd = PlayerService.Instance != null ? PlayerService.Instance.Data : null;
+        if (pd == null)
+        {
+            Debug.LogWarning("[RunController] PlayerData puuttuu, fallback → StartNewEncounter.");
+            StartNewEncounter();
+            return;
+        }
+
+        // Varmista ettei macro-palanen jää drag-tilaan
+        var piece = macroView.macroPiece;
+        if (piece != null)
+            piece.SendMessage("ForceStopDrag", SendMessageOptions.DontRequireReceiver);
+
+        Debug.Log("[RunController] EnterMacroPhase()");
+
+        // Palauta macro-canvas varmasti overlayksi
+        var macroCanvas = macroView.GetComponentInParent<Canvas>(true);
+        if (macroCanvas != null)
+        {
+            if (macroCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                Debug.LogWarning($"[Macro FIX] Canvas renderMode was {macroCanvas.renderMode}, restoring to ScreenSpaceOverlay.");
+            }
+
+            macroCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            macroCanvas.worldCamera = null;
+            macroCanvas.planeDistance = 100f;
+
+            macroCanvas.gameObject.SetActive(true);
+            macroCanvas.enabled = true;
+
+            var canvasRT = macroCanvas.GetComponent<RectTransform>();
+            if (canvasRT != null)
+            {
+                canvasRT.localRotation = Quaternion.identity;
+                canvasRT.localScale = Vector3.one;
+            }
+        }
+
+        // Tyhjennä DragLayer varmuuden vuoksi
+        if (macroCanvas != null)
+        {
+            var dragLayer = macroCanvas.transform.Find("DragLayer");
+            if (dragLayer != null)
+            {
+                Debug.Log("[MacroPhase] Clearing DragLayer children");
+                for (int i = dragLayer.childCount - 1; i >= 0; i--)
+                    Destroy(dragLayer.GetChild(i).gameObject);
+            }
+        }
+
+        // Sulje muut UI:t
+        if (shopPanel != null) shopPanel.SetActive(false);
+        if (alchemistPanel != null) alchemistPanel.SetActive(false);
+
+        if (boardView != null)
+        {
+            boardView.gameObject.SetActive(false);
+            boardView.enabled = false;
+        }
+
+        // Palauta macroviewn kaikki tärkeät osat näkyviin
+        macroView.gameObject.SetActive(true);
+
+        if (macroView.cellsRoot != null)
+            macroView.cellsRoot.gameObject.SetActive(true);
+
+        if (macroView.loadoutRoot != null)
+            macroView.loadoutRoot.gameObject.SetActive(true);
+
+        if (macroView.loadoutGrid != null)
+            macroView.loadoutGrid.gameObject.SetActive(true);
+
+        if (macroView.macroPiece != null)
+            macroView.macroPiece.gameObject.SetActive(true);
+
+        // Pakota RectTransform järkevään tilaan
+        var rt = macroView.GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.localRotation = Quaternion.identity;
+            rt.localScale = Vector3.one;
         }
 
         Debug.Log($"[RunController] MacroView={macroView.name}, activeBefore={macroView.gameObject.activeSelf}");
@@ -298,29 +349,47 @@ public sealed class RunController : MonoBehaviour
 
         Debug.Log($"[RunController] MacroView activeAfter={macroView.gameObject.activeSelf}");
 
-        // 🔧 VARMISTETAAN, että macropiece on oikeasti dragattava
         if (macroView.macroPiece != null)
-        {
             UIDraggablePiece.EnsureIconVisible(macroView.macroPiece.gameObject);
-        }
 
-        // (valinnainen, jos sulla on DragController käytössä)
         var drag = FindObjectOfType<DragController>();
         if (drag != null)
-        {
             drag.enabled = true;
-        }
 
-        var dragPieces = GameObject.FindObjectsOfType<UIDraggablePiece>();
+        var dragPieces = GameObject.FindObjectsOfType<UIDraggablePiece>(true);
         foreach (var d in dragPieces)
-        {
             d.SendMessage("ForceStopDrag", SendMessageOptions.DontRequireReceiver);
-        }
+
         UIDraggablePiece.s_IsDraggingAny = false;
 
+        // Debug visibility
+        var parents = macroView.GetComponentsInParent<Transform>(true);
+        for (int i = 0; i < parents.Length; i++)
+        {
+            var t = parents[i];
+            Debug.Log($"[Macro VIS] parent={t.name} activeSelf={t.gameObject.activeSelf} activeInHierarchy={t.gameObject.activeInHierarchy}");
+        }
+
+        var cgList = macroView.GetComponentsInParent<CanvasGroup>(true);
+        for (int i = 0; i < cgList.Length; i++)
+        {
+            var cg = cgList[i];
+            Debug.Log($"[Macro VIS] CanvasGroup on {cg.gameObject.name}: alpha={cg.alpha} interactable={cg.interactable} blocksRaycasts={cg.blocksRaycasts}");
+        }
+
+        if (macroCanvas != null)
+        {
+            Debug.Log($"[Macro VIS] Canvas name={macroCanvas.name} enabled={macroCanvas.enabled} activeInHierarchy={macroCanvas.gameObject.activeInHierarchy} renderMode={macroCanvas.renderMode} sortingOrder={macroCanvas.sortingOrder}");
+            Debug.Log($"[Macro VIS] Canvas worldCamera={(macroCanvas.worldCamera != null ? macroCanvas.worldCamera.name : "NULL")}");
+        }
+
+        if (rt != null)
+        {
+            Debug.Log($"[Macro VIS] RectTransform anchoredPos={rt.anchoredPosition} localPos={rt.localPosition} sizeDelta={rt.sizeDelta} scale={rt.localScale}");
+        }
     }
 
-    
+
 
     /// <summary>
     /// Kutsutaan kun macroPiece siirtyy seuraavaan ruutuun.
@@ -585,25 +654,39 @@ public sealed class RunController : MonoBehaviour
 
         if (playerWon)
         {
-            var reward = 10;
-            PlayerService.Instance.AddCoins(reward);
-
-            if (boardView != null)
-            {
-                boardView.Teardown(destroySelfGO: false);
-                boardView.gameObject.SetActive(false);
-                boardView.enabled = false;
-            }
-
-            // HUOM: ei kosketa DragControlleriin
-
-            EnterMacroPhase();
+            if (_returningToMacro) return;
+            _returningToMacro = true;
+            StartCoroutine(CoHandleWinAndReturnToMacro());
         }
         else
         {
             Debug.Log("[Run] Player lost → hard reset run + restart");
             ResetRunAndRestart();
         }
+    }
+
+    private IEnumerator CoHandleWinAndReturnToMacro()
+    {
+        var reward = 10;
+        PlayerService.Instance.AddCoins(reward);
+
+        // Lopeta mahdollinen aktiivinen drag ENNEN kuin battle-view puretaan
+        dragController?.CancelActiveDragImmediately();
+
+        // Anna ApplyMove/FinishDrag stackin purkautua
+        yield return null;
+
+        if (boardView != null)
+        {
+            boardView.Teardown(destroySelfGO: false);
+            boardView.gameObject.SetActive(false);
+            boardView.enabled = false;
+        }
+
+        yield return null;
+
+        EnterMacroPhase();
+        _returningToMacro = false;
     }
 
     // ---------- SHOP ----------

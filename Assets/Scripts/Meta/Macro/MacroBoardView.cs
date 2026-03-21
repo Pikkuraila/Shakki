@@ -50,14 +50,26 @@ public sealed class MacroBoardView : MonoBehaviour
                   $"loadoutRoot={(loadoutRoot != null ? loadoutRoot.name : "NULL")} " +
                   $"loadoutRootActiveBefore={(loadoutRoot != null ? loadoutRoot.activeSelf.ToString() : "NULL")} " +
                   $"loadoutGrid={(loadoutGrid != null ? loadoutGrid.name : "NULL")} " +
-                  $"loadoutGridActiveBefore={(loadoutGrid != null ? loadoutGrid.gameObject.activeSelf.ToString() : "NULL")}");
+                  $"loadoutGridActiveBefore={(loadoutGrid != null ? loadoutGrid.gameObject.activeSelf.ToString() : "NULL")} " +
+                  $"cellsRoot={(cellsRoot != null ? cellsRoot.name : "NULL")} " +
+                  $"cellsRootActiveBefore={(cellsRoot != null ? cellsRoot.gameObject.activeSelf.ToString() : "NULL")} " +
+                  $"macroPiece={(macroPiece != null ? macroPiece.name : "NULL")} " +
+                  $"macroPieceActiveBefore={(macroPiece != null ? macroPiece.gameObject.activeSelf.ToString() : "NULL")}");
 
         gameObject.SetActive(visible);
 
+        // Älä käytä else-if:ää, vaan palauta kaikki tarvittavat osat erikseen
         if (loadoutRoot != null)
             loadoutRoot.SetActive(visible);
-        else if (loadoutGrid != null)
+
+        if (loadoutGrid != null)
             loadoutGrid.gameObject.SetActive(visible);
+
+        if (cellsRoot != null)
+            cellsRoot.gameObject.SetActive(visible);
+
+        if (macroPiece != null)
+            macroPiece.gameObject.SetActive(visible);
 
         if (visible && loadoutGrid != null)
         {
