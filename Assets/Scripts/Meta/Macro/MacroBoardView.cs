@@ -4,6 +4,11 @@ using UnityEngine.UI;
 
 public sealed class MacroBoardView : MonoBehaviour
 {
+
+    [SerializeField] private int maxVisibleRows = 5;
+    private int _windowStartRow = 0;
+
+
     [Header("Data")]
     public MacroMapSO map;
 
@@ -81,7 +86,44 @@ public sealed class MacroBoardView : MonoBehaviour
 
 
 
+    private int GetWindowStartRow()
+    {
+        if (map == null || map.rows <= maxVisibleRows)
+            return 0;
 
+        int currentRow = _currentIndex / map.columns;
+        int maxStart = map.rows - maxVisibleRows;
+        return Mathf.Clamp(currentRow, 0, maxStart);
+    }
+
+    private int VisibleIndexToMapIndex(int visibleIndex)
+    {
+        int columns = map.columns;
+        int localRow = visibleIndex / columns;
+        int col = visibleIndex % columns;
+        int mapRow = _windowStartRow + localRow;
+        return map.GetIndex(mapRow, col);
+    }
+
+    private bool TryGetVisibleIndexFromMapIndex(int mapIndex, out int visibleIndex)
+    {
+        visibleIndex = -1;
+        if (map == null) return false;
+        if (mapIndex < 0 || mapIndex >= map.TileCount) return false;
+
+        int columns = map.columns;
+        int mapRow = mapIndex / columns;
+        int mapCol = mapIndex % columns;
+
+        int visibleRows = Mathf.Min(maxVisibleRows, map.rows);
+
+        if (mapRow < _windowStartRow || mapRow >= _windowStartRow + visibleRows)
+            return false;
+
+        int localRow = mapRow - _windowStartRow;
+        visibleIndex = localRow * columns + mapCol;
+        return true;
+    }
 
 
     private void EnsureLoadoutGrid()
@@ -113,9 +155,9 @@ public sealed class MacroBoardView : MonoBehaviour
             return;
         }
 
-        int rows = map.rows;
+        int visibleRows = Mathf.Min(maxVisibleRows, map.rows);
         int columns = map.columns;
-        int needed = rows * columns;
+        int needed = visibleRows * columns;
 
         var grid = cellsRoot.GetComponent<GridLayoutGroup>();
         if (grid != null)
@@ -142,7 +184,6 @@ public sealed class MacroBoardView : MonoBehaviour
                 if (cell == null)
                     cell = go.AddComponent<MacroCellView>();
 
-                cell.Setup(this, i);
                 _cells[i] = cell;
             }
         }
@@ -156,7 +197,6 @@ public sealed class MacroBoardView : MonoBehaviour
                 if (cell == null)
                     cell = child.gameObject.AddComponent<MacroCellView>();
 
-                cell.Setup(this, i);
                 _cells[i] = cell;
             }
         }
@@ -166,10 +206,15 @@ public sealed class MacroBoardView : MonoBehaviour
     {
         if (map == null || _cells == null) return;
 
-        for (int i = 0; i < _cells.Length; i++)
+        _windowStartRow = GetWindowStartRow();
+
+        for (int visibleIndex = 0; visibleIndex < _cells.Length; visibleIndex++)
         {
-            var tile = map.tiles != null && i < map.tiles.Length ? map.tiles[i] : default;
-            _cells[i].Refresh(tile, _currentIndex);
+            int mapIndex = VisibleIndexToMapIndex(visibleIndex);
+            var tile = map.GetTile(mapIndex);
+
+            _cells[visibleIndex].Setup(this, mapIndex);
+            _cells[visibleIndex].Refresh(tile, _currentIndex);
         }
 
         EnsurePieceOnCurrentCell();
@@ -177,10 +222,12 @@ public sealed class MacroBoardView : MonoBehaviour
 
     private void EnsurePieceOnCurrentCell()
     {
-        if (macroPiece == null || _cells == null) return;
-        if (_currentIndex < 0 || _currentIndex >= _cells.Length) return;
+        if (macroPiece == null || _cells == null || map == null) return;
 
-        var cell = _cells[_currentIndex];
+        if (!TryGetVisibleIndexFromMapIndex(_currentIndex, out int visibleIndex))
+            return;
+
+        var cell = _cells[visibleIndex];
         Transform target = cell.pieceAnchor != null ? cell.pieceAnchor : cell.transform;
 
         macroPiece.transform.SetParent(target, false);
@@ -190,8 +237,18 @@ public sealed class MacroBoardView : MonoBehaviour
     public void HandleDropToCell(int targetIndex)
     {
         if (_cells == null || map == null) return;
-        if (targetIndex < 0 || targetIndex >= _cells.Length) { EnsurePieceOnCurrentCell(); return; }
-        if (_currentIndex < 0 || _currentIndex >= _cells.Length) { EnsurePieceOnCurrentCell(); return; }
+
+        if (targetIndex < 0 || targetIndex >= map.TileCount)
+        {
+            EnsurePieceOnCurrentCell();
+            return;
+        }
+
+        if (_currentIndex < 0 || _currentIndex >= map.TileCount)
+        {
+            EnsurePieceOnCurrentCell();
+            return;
+        }
 
         int columns = map.columns;
 
