@@ -64,6 +64,9 @@ public class DragController : MonoBehaviour
     [SerializeField] private float landSquash = 0.06f;
     [SerializeField] private float landRebound = 0.04f;
 
+    [SerializeField] private DragController dragController;
+    private bool _returningToMacro;
+
     private PieceView _dragPV;
     private Vector3 _dragStartWorld;
     private (int x, int y) _dragStartBoard;
@@ -257,6 +260,31 @@ public class DragController : MonoBehaviour
             yield return null;
         }
         pv.transform.position = new Vector3(to.x, to.y, -1f);
+    }
+
+    public void CancelActiveDragImmediately()
+    {
+        StopAllCoroutines();
+
+        if (_dragSR) _dragSR.sortingOrder = _prevSortingOrder;
+
+        if (_dragPV != null)
+        {
+            _dragPV.transform.localScale = _defaultScale;
+            _dragPV.transform.rotation = Quaternion.identity;
+            _dragPV.transform.position = new Vector3(
+                _dragPV.transform.position.x,
+                _dragPV.transform.position.y,
+                -1f
+            );
+        }
+
+        if (board != null)
+            board.ClearHighlightsPublic();
+
+        _dragPV = null;
+        _legals.Clear();
+        _dropping = false;
     }
 
     // --- UI-yhteensopivuus (tyhjät stubit) ---
