@@ -1,15 +1,14 @@
-﻿// Assets/Scripts/Meta/Encounter/EncounterLoader.cs
-using System;
+﻿using System;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
-using Shakki.Core;   // GameState, Coord, Piece, IMoveRule
+using Shakki.Core;
 
 public static class EncounterLoader
 {
     public static void Apply(GameState s, EncounterSO enc, GameCatalogSO catalog)
     {
-        Debug.Log($"[EL] relativeRanks={enc.relativeRanks} fillBlackPawnsAtY={enc.fillBlackPawnsAtY} blackPawnsY={enc.blackPawnsY} board={s.Width}x{s.Height}");
+        Debug.Log($"[EL] absolute-only board={s.Width}x{s.Height}");
 
         if (enc.spawns == null || enc.spawns.Count == 0)
         {
@@ -17,28 +16,20 @@ public static class EncounterLoader
         }
         else
         {
-            Debug.Log("[EL] spawns-in (rel): " + string.Join(", ",
+            Debug.Log("[EL] spawns-in: " + string.Join(", ",
                 enc.spawns.Select(sp => $"{sp.owner}:{sp.pieceId}@({sp.x},{sp.y})")));
 
-            // Turvallinen tarkistus ilman '?.'
             var firstOwner = enc.spawns[0].owner;
             if (string.IsNullOrEmpty(firstOwner))
-                Debug.LogWarning("[EL] First spawn owner is null/empty — check EnemyAssembler & LoadoutAssembler owners!");
+                Debug.LogWarning("[EL] First spawn owner is null/empty.");
         }
-
-
-
 
         if (s == null) { Debug.LogError("[EncounterLoader] GameState is null"); return; }
         if (enc == null) { Debug.LogError("[EncounterLoader] EncounterSO is null"); return; }
         if (catalog == null) { Debug.LogError("[EncounterLoader] GameCatalogSO is null"); return; }
 
-        // 0) Tyhjennä lauta turvallisesti GameState-APIn kautta
         ClearBoardBySettingNulls(s);
 
-
-
-        // 1) Spawnaa kaikki määritellyt olennot
         foreach (var sp in enc.spawns)
         {
             if (string.IsNullOrEmpty(sp.owner) || string.IsNullOrEmpty(sp.pieceId))
@@ -51,7 +42,7 @@ public static class EncounterLoader
                 continue;
             }
 
-            var c = ToAbsoluteCoord(s, enc, sp.owner, sp.x, sp.y);
+            var c = new Coord(sp.x, sp.y);
             if (!s.InBounds(c))
             {
                 Debug.LogWarning($"[EncounterLoader] OOB spawn {sp.owner}:{sp.pieceId} at {c.X},{c.Y}");
@@ -73,46 +64,7 @@ public static class EncounterLoader
 
             s.Set(c, piece);
         }
-
-        // 2) Fallback-fill: lisää 1 musta sotilas vain jos ei tullut yhtään mustaa nappulaa
-        if (enc.fillBlackPawnsAtY)
-        {
-            bool anyBlack = false;
-            foreach (var c in s.AllCoords())
-            {
-                var p = s.Get(c);
-                if (p != null && string.Equals(p.Owner, "black", StringComparison.OrdinalIgnoreCase))
-                {
-                    anyBlack = true;
-                    break;
-                }
-            }
-
-            if (!anyBlack)
-            {
-                int absY = enc.relativeRanks ? (s.Height - 1 - enc.blackPawnsY) : enc.blackPawnsY;
-                var pawnDef = catalog.GetPieceById("Pawn");
-
-                for (int x = 0; x < s.Width; x++)
-                {
-                    var c = new Coord(x, absY);
-                    if (!s.InBounds(c)) continue;
-                    if (s.Get(c) != null) continue;
-
-                    var pawn = pawnDef != null
-                        ? CreatePieceFromDef("black", pawnDef)
-                        : new Piece("black", "Pawn", Array.Empty<IMoveRule>());
-
-                    s.Set(c, pawn);
-                    Debug.Log($"[EL] Fallback-fill: spawned black Pawn at ({c.X},{c.Y})");
-                    break;
-                }
-            }
-        }
-
     }
-
-    // --- Helpers ---
 
     private static void ClearBoardBySettingNulls(GameState s)
     {
@@ -120,18 +72,6 @@ public static class EncounterLoader
             s.Set(c, null);
     }
 
-    /// Muuntaa (x,y) absoluuttiseksi koordiksi huomioiden relativeRanks.
-    private static Coord ToAbsoluteCoord(GameState s, EncounterSO enc, string owner, int x, int y)
-    {
-        if (!enc.relativeRanks) return new Coord(x, y);
-        if (!string.IsNullOrEmpty(owner) && owner.Equals("black", StringComparison.OrdinalIgnoreCase))
-            return new Coord(x, (s.Height - 1) - y);
-        return new Coord(x, y);
-    }
-
-    /// Luo Piece-instanssin PieceDefSO:sta.
-    /// Yrittää rakentaa IMoveRule[] def.rules:ista (jos MoveRuleSO:lla on Build/ToRule-metodi).
-    /// Muussa tapauksessa käyttää tyhjää sääntölistaa — jolloin pelin on syytä käyttää IRulesResolveria siirtogeneraatiolle.
     private static Piece CreatePieceFromDef(string owner, PieceDefSO def)
     {
         var rules = TryBuildRules(def) ?? Array.Empty<IMoveRule>();
@@ -142,7 +82,6 @@ public static class EncounterLoader
         return piece;
     }
 
-    /// Rakennetaan IMoveRule[] PieceDefSO.rules:ista, jos mahdollista.
     private static IMoveRule[] TryBuildRules(PieceDefSO def)
     {
         if (def == null || def.rules == null || def.rules.Length == 0)
@@ -158,14 +97,11 @@ public static class EncounterLoader
         return list;
     }
 
-    /// Kutsuu yleisimpiä tehtaanimiä: Build(), ToRule(), Create(), Instantiate()
-    /// Palauttaa null, jos mikään ei onnistu.
     private static IMoveRule BuildRuleSafe(ScriptableObject ruleSO)
     {
         if (ruleSO == null) return null;
 
         var t = ruleSO.GetType();
-        // Yleisimmät nimet, parametriton ja palauttaa IMoveRule
         var methodNames = new[] { "Build", "ToRule", "Create", "Instantiate" };
 
         foreach (var name in methodNames)
@@ -184,7 +120,6 @@ public static class EncounterLoader
             }
         }
 
-        // Jos SO:lla on suora property "Rule" (IMoveRule) tms.
         var prop = t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
                     .FirstOrDefault(p => typeof(IMoveRule).IsAssignableFrom(p.PropertyType));
         if (prop != null)
@@ -194,10 +129,9 @@ public static class EncounterLoader
                 var val = prop.GetValue(ruleSO);
                 if (val is IMoveRule rule) return rule;
             }
-            catch { /* ignore */ }
+            catch { }
         }
 
-        // Ei pystytty rakentamaan — palauta null (käytetään resolveria pelissä)
         return null;
     }
 }

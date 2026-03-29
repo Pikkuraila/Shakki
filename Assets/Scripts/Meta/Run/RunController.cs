@@ -63,9 +63,8 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private MacroBoardView macroView;
     [SerializeField] private MacroMapGeneratorSO macroGenerator;
 
-    [Header("Macro Scaling")]
-    [SerializeField] private int baseBattleDifficulty = 1;
-    [SerializeField] private int baseShopTier = 1;
+    [Header("Balance")]
+    [SerializeField] private RunBalanceSO runBalance;
 
     [Header("Encounter Pools")]
     [SerializeField] private EncounterPoolSO battlePool;
@@ -128,6 +127,87 @@ public sealed class RunController : MonoBehaviour
     private GameState _state;
     private IRulesResolver _rules;
     private const int Slots = 16;
+
+
+
+    
+
+    private RunBalanceSO.BattleTuning GetBattleTuningForTier(int tier)
+    {
+        if (runBalance != null)
+        {
+            return new RunBalanceSO.BattleTuning
+            {
+                tier = tier,
+                budget = runBalance.GetBudgetForTier(tier),
+                capCost = runBalance.GetCapCostForTier(tier),
+                cheapPieceBiasPower = runBalance.cheapPieceBiasPower,
+                forceBlackKingThreshold = runBalance.forceBlackKingThreshold
+            };
+        }
+
+        return new RunBalanceSO.BattleTuning
+        {
+            tier = tier,
+            budget = 2 + tier * 2,
+            capCost = Mathf.Max(1, 1 + tier),
+            cheapPieceBiasPower = 1.2f,
+            forceBlackKingThreshold = 5
+        };
+    }
+
+    private void LogMacroDifficulty(MacroTileDef tile, int row, int battleTier, int shopTier, bool isBoss = false)
+    {
+        string tileType = tile.type.ToString();
+        int diffOffset = tile.difficultyOffset;
+        int shopOffset = tile.shopTierOffset;
+
+        if (runBalance != null)
+        {
+            var tuning = runBalance.GetBattleTuning(row, diffOffset, isBoss);
+
+            Debug.Log(
+                $"[Balance] tileType={tileType} row={row} " +
+                $"diffOffset={diffOffset} shopOffset={shopOffset} isBoss={isBoss} " +
+                $"battleTier={battleTier} shopTier={shopTier} " +
+                $"budget={tuning.budget} capCost={tuning.capCost} " +
+                $"cheapBias={tuning.cheapPieceBiasPower:F2} " +
+                $"forceBlackKingThreshold={tuning.forceBlackKingThreshold}"
+            );
+        }
+        else
+        {
+            var tuning = GetBattleTuningForTier(battleTier);
+
+            Debug.Log(
+                $"[Balance] tileType={tileType} row={row} " +
+                $"diffOffset={diffOffset} shopOffset={shopOffset} isBoss={isBoss} " +
+                $"battleTier={battleTier} shopTier={shopTier} " +
+                $"budget={tuning.budget} capCost={tuning.capCost} " +
+                $"cheapBias={tuning.cheapPieceBiasPower:F2} " +
+                $"forceBlackKingThreshold={tuning.forceBlackKingThreshold} " +
+                $"(fallback values)"
+            );
+        }
+    }
+
+    private int GetBattleDifficultyForTile(int row, MacroTileDef tile, bool isBoss = false)
+    {
+        if (runBalance != null)
+            return runBalance.GetBattleDifficulty(row, tile.difficultyOffset, isBoss);
+
+        int value = 1 + row + tile.difficultyOffset + (isBoss ? 0 : 0);
+        return Mathf.Max(1, value);
+    }
+
+    private int GetShopTierForTile(int row, MacroTileDef tile)
+    {
+        if (runBalance != null)
+            return runBalance.GetShopTier(row, tile.shopTierOffset);
+
+        int value = 1 + row + tile.shopTierOffset;
+        return Mathf.Max(1, value);
+    }
 
     // ---------- LIFECYCLE ----------
 
@@ -415,20 +495,19 @@ public sealed class RunController : MonoBehaviour
 
         var tile = macroMap.GetTile(newIndex);
 
-        // --- SKAALAUS: battle difficulty + shop tier ---
         int columns = macroMap.columns;
-        int row = newIndex / columns; // mitä alempana kartalla, sitä isompi rivi
+        int row = newIndex / columns;
 
-        _pendingBattleDifficulty = baseBattleDifficulty + row + tile.difficultyOffset;
-        if (_pendingBattleDifficulty < 1) _pendingBattleDifficulty = 1;
+        _pendingBattleDifficulty = GetBattleDifficultyForTile(row, tile, isBoss: false);
+        _pendingShopTier = GetShopTierForTile(row, tile);
 
-        _pendingShopTier = baseShopTier + row + tile.shopTierOffset;
-        if (_pendingShopTier < 1) _pendingShopTier = 1;
+        LogMacroDifficulty(tile, row, _pendingBattleDifficulty, _pendingShopTier, isBoss: false);
 
-        Debug.Log($"[RunController] MacroAdvance index={newIndex}, row={row}, type={tile.type}, " +
-                  $"battleDiff={_pendingBattleDifficulty}, shopTier={_pendingShopTier}");
+        Debug.Log(
+            $"[RunController] MacroAdvance index={newIndex}, row={row}, type={tile.type}, " +
+            $"battleDiff={_pendingBattleDifficulty}, shopTier={_pendingShopTier}"
+        );
 
-        // --- Avaa kyseinen eventti ---
         OpenEventFor(tile);
     }
 
@@ -483,10 +562,22 @@ public sealed class RunController : MonoBehaviour
                 }
 
             case MacroEventType.Boss:
-                _pendingEncounterOverride = bossPool != null ? bossPool.Pick(_pendingBattleDifficulty) : null;
-                Debug.Log($"[Macro] Boss tier={_pendingBattleDifficulty} picked={(_pendingEncounterOverride ? _pendingEncounterOverride.name : "NULL")}");
-                StartNewEncounter();
-                break;
+                {
+                    var ps = PlayerService.Instance;
+                    int currentIndex = ps != null ? ps.Data.macroIndex : 0;
+                    int row = (macroMap != null && macroMap.columns > 0)
+                        ? currentIndex / macroMap.columns
+                        : 0;
+
+                    int bossTier = GetBattleDifficultyForTile(row, tile, isBoss: true);
+
+                    LogMacroDifficulty(tile, row, bossTier, _pendingShopTier, isBoss: true);
+
+                    _pendingEncounterOverride = bossPool != null ? bossPool.Pick(bossTier) : null;
+                    Debug.Log($"[Macro] Boss tier={bossTier} picked={(_pendingEncounterOverride ? _pendingEncounterOverride.name : "NULL")}");
+                    StartNewEncounter();
+                    break;
+                }
 
             case MacroEventType.Shop:
                 OpenShop();
@@ -516,25 +607,32 @@ public sealed class RunController : MonoBehaviour
     // RunController.cs
     private EnemySpec BuildEnemySpecFromBudget(int tier)
     {
-        // budjetti: säädä vapaasti
-        int budget = 2 + tier * 2; // esim tier1=4, tier2=6, tier3=8
-        int capCost = Mathf.Max(1, 1 + tier); // ei liian kalliita aikaisin
+        var tuning = GetBattleTuningForTier(tier);
 
-        // kerää ehdokkaat catalogista
-        // (oleta että catalog.pieces listaa PieceDefSO:t)
-        var all = (catalog != null && catalog.pieces != null) ? catalog.pieces : new System.Collections.Generic.List<PieceDefSO>();
+        int budget = tuning.budget;
+        int capCost = tuning.capCost;
+        float cheapBiasPower = tuning.cheapPieceBiasPower;
 
-        // sallitaan Pawn mukaan, King ei ole pakollinen tässä systeemissä
+        Debug.Log(
+            $"[Balance] BuildEnemySpecFromBudget tier={tier} " +
+            $"budget={budget} capCost={capCost} cheapBias={cheapBiasPower:F2}"
+        );
+
+        var all = (catalog != null && catalog.pieces != null)
+            ? catalog.pieces
+            : new List<PieceDefSO>();
+
         var candidates = all
             .Where(p => p != null)
             .Where(p => !string.IsNullOrEmpty(p.typeName))
-            .Where(p => p.typeName != "King")                 // King ei automaattinen
-            .Where(p => p.cost > 0 && p.cost <= capCost)      // tier-cap
+            .Where(p => p.typeName != "King")
+            .Where(p => p.cost > 0 && p.cost <= capCost)
             .ToList();
 
-        // jos ei löydy mitään, fallback pawn
         if (candidates.Count == 0)
         {
+            Debug.LogWarning("[Balance] No candidates found for procedural enemy build -> fallback Pawn.");
+
             return new EnemySpec
             {
                 mode = EnemySpec.Mode.Slots,
@@ -548,25 +646,30 @@ public sealed class RunController : MonoBehaviour
 
         var picks = new List<string>();
 
-        // pieni “minimi”: vähintään 1 nappula
+        int originalBudget = budget;
         int safety = 0;
+
         while (budget > 0 && safety++ < 200)
         {
-            // ehdokkaat jotka mahtuu jäljellä olevaan budjettiin
             var fit = candidates.Where(p => p.cost <= budget).ToList();
-            if (fit.Count == 0) break;
+            if (fit.Count == 0)
+                break;
 
-            // painotus: halvempi yleisempi
-            // w = 1 / cost^1.2
             float totalW = 0f;
-            foreach (var p in fit) totalW += 1f / Mathf.Pow(p.cost, 1.2f);
+            foreach (var p in fit)
+                totalW += 1f / Mathf.Pow(p.cost, cheapBiasPower);
 
             float roll = UnityEngine.Random.value * totalW;
             PieceDefSO chosen = fit[0];
+
             foreach (var p in fit)
             {
-                float w = 1f / Mathf.Pow(p.cost, 1.2f);
-                if (roll < w) { chosen = p; break; }
+                float w = 1f / Mathf.Pow(p.cost, cheapBiasPower);
+                if (roll < w)
+                {
+                    chosen = p;
+                    break;
+                }
                 roll -= w;
             }
 
@@ -574,23 +677,22 @@ public sealed class RunController : MonoBehaviour
             budget -= chosen.cost;
         }
 
-        // jos mitään ei tullut, varmista pawn
-        if (picks.Count == 0) picks.Add("Pawn");
+        if (picks.Count == 0)
+            picks.Add("Pawn");
 
-        // (valinnainen) joskus lisätään King, mutta EI pakollinen:
-        // Jos lisäät kingin, sun pitää myöhemmin muuttaa game-end logiikkaa kuten sanoit.
-        // if (tier >= 2 && UnityEngine.Random.value < 0.4f) picks.Add("King");
+        Debug.Log(
+            $"[Balance] Procedural enemy result tier={tier} " +
+            $"startBudget={originalBudget} remainingBudget={budget} " +
+            $"pieceCount={picks.Count} picks=[{string.Join(",", picks)}]"
+        );
 
         return new EnemySpec
         {
             mode = EnemySpec.Mode.Slots,
             blackSlots = picks,
-
             useDropPlacement = true,
             forbidWhiteAndAllyRows = 3,
             backBiasPower = 2.2f,
-
-            // fallback-fill: oletuksena OFF (koska sanoit "vain silloin")
             fallbackFillBlackPawnsRow = false,
             fallbackBlackPawnsRelY = 1
         };
@@ -905,7 +1007,6 @@ public sealed class RunController : MonoBehaviour
     {
         if (enc == null || enc.spawns == null || enc.spawns.Count == 0) return;
 
-        // 1) Etsi black king spawn indeksinä (Spawn on struct)
         int kingIndex = -1;
         for (int i = 0; i < enc.spawns.Count; i++)
         {
@@ -918,24 +1019,18 @@ public sealed class RunController : MonoBehaviour
         }
         if (kingIndex < 0) return;
 
-        // ✅ relativeRanks: back rank on y=0 myös mustalle
-        int targetY = enc.relativeRanks ? 0 : (boardHeight - 1);
+        int targetY = boardHeight - 1;
 
-        // 2) Kerää varatut koordit
-        // relativeRanks: vertaile vain mustien kesken (white on eri avaruudessa)
         var occupied = new HashSet<(int x, int y)>();
         for (int i = 0; i < enc.spawns.Count; i++)
         {
             if (i == kingIndex) continue;
+
             var s = enc.spawns[i];
-
-            if (enc.relativeRanks && s.owner != "black")
-                continue;
-
-            occupied.Add((s.x, s.y));
+            if (s.owner == "black")
+                occupied.Add((s.x, s.y));
         }
 
-        // 3) Valitse vapaa x back-rankilta (center-out)
         int mid = boardWidth / 2;
         int chosenX = -1;
 
@@ -944,8 +1039,17 @@ public sealed class RunController : MonoBehaviour
             int x1 = mid - dx;
             int x2 = mid + dx;
 
-            if (x1 >= 0 && x1 < boardWidth && !occupied.Contains((x1, targetY))) { chosenX = x1; break; }
-            if (x2 >= 0 && x2 < boardWidth && !occupied.Contains((x2, targetY))) { chosenX = x2; break; }
+            if (x1 >= 0 && x1 < boardWidth && !occupied.Contains((x1, targetY)))
+            {
+                chosenX = x1;
+                break;
+            }
+
+            if (x2 >= 0 && x2 < boardWidth && !occupied.Contains((x2, targetY)))
+            {
+                chosenX = x2;
+                break;
+            }
         }
 
         if (chosenX < 0)
@@ -954,13 +1058,12 @@ public sealed class RunController : MonoBehaviour
             return;
         }
 
-        // 4) Päivitä spawn (struct → writeback)
         var king = enc.spawns[kingIndex];
         king.x = chosenX;
         king.y = targetY;
         enc.spawns[kingIndex] = king;
 
-        Debug.Log($"[RunController] Forced black King to back rank (relativeRanks={enc.relativeRanks}) at ({chosenX},{targetY}).");
+        Debug.Log($"[RunController] Forced black King to absolute back rank at ({chosenX},{targetY}).");
     }
 
 
@@ -1003,7 +1106,10 @@ public sealed class RunController : MonoBehaviour
             var spec = _pendingEnemySpecOverride;
             _pendingEnemySpecOverride = null;
 
-            EnforceBlackKingInDropSpecIfManyPieces(spec, threshold: 5);
+            EnforceBlackKingInDropSpecIfManyPieces(
+                spec,
+                threshold: runBalance != null ? runBalance.forceBlackKingThreshold : 5
+                );
 
             if (slotMap != null && PlayerService.Instance != null && PlayerService.Instance.Data != null)
             {
@@ -1075,9 +1181,14 @@ public sealed class RunController : MonoBehaviour
         }
 
         // --- C) Inspector override (debug) ---
-        else if (encounterOverride != null)
+        else if (_pendingEncounterOverride != null)
         {
-            enc = encounterOverride;
+            var enemyPreset = _pendingEncounterOverride;
+            _pendingEncounterOverride = null;
+
+            enc = enemyPreset;
+
+            Debug.Log($"[RunController] TEMP: using enemy preset directly '{enemyPreset.name}' without LoadoutAssembler.");
         }
 
         // --- D) Muuten dynaamisesti normaalilla enemySpecillä ---
@@ -1090,7 +1201,10 @@ public sealed class RunController : MonoBehaviour
             {
                 var spec = enemySpec ?? new EnemySpec { mode = EnemySpec.Mode.Classic };
 
-                EnforceBlackKingInDropSpecIfManyPieces(spec, threshold: 5);
+                EnforceBlackKingInDropSpecIfManyPieces(
+    spec,
+    threshold: runBalance != null ? runBalance.forceBlackKingThreshold : 5
+);
 
                 enc = LoadoutAssembler.BuildFromPlayerDataDrop(
                     pdata,
@@ -1123,7 +1237,7 @@ public sealed class RunController : MonoBehaviour
         // SlotMap-pohjaiset encit on käytännössä aina relativeRanks = true.
         // Älä kuitenkaan jyrää jos joku scripted/preset haluaa toisin.
         // (Jos haluat väkisin: pidä tämä.)
-        enc.relativeRanks = true;
+       
 
         // Fallbackfill: vain mustat pawnit, ja vain jos encounterissa pyydetty.
         // (ÄLÄ enää pakota aina true täällä.)
@@ -1228,15 +1342,22 @@ public sealed class RunController : MonoBehaviour
     private EncounterSO BuildMinimalFallbackEncounter()
     {
         var e = ScriptableObject.CreateInstance<EncounterSO>();
-        e.relativeRanks = true;
+
+        e.requireWhiteKing = true;
+        e.requireBlackKing = true;
+
         e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "King", x = 4, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Pawn", x = 3, y = 1 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Pawn", x = 4, y = 1 });
+
         e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "King", x = 3, y = 7 });
-        e.fillWhitePawnsAtY = true; e.whitePawnsY = 1;
-        e.fillBlackPawnsAtY = true; e.blackPawnsY = 6;
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Pawn", x = 3, y = 6 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Pawn", x = 4, y = 6 });
+
         return e;
     }
 
-   
+
 
     public void OnResetButtonPressed()
     {

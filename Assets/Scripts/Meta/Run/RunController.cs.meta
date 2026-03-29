@@ -13,8 +13,22 @@ MonoImporter:
   - loadoutView: {instanceID: 0}
   - shopView: {instanceID: 0}
   - defaultShopPool: {fileID: 11400000, guid: 2a9a13ae76ee3dc4fb55b453ea1ede8b, type: 2}
+  - alchemistPanel: {instanceID: 0}
+  - alchemistView: {instanceID: 0}
+  - alchemistLoadoutView: {instanceID: 0}
+  - amalgamBaseDef: {instanceID: 0}
+  - dragController: {instanceID: 0}
+  - macroPreset: {instanceID: 0}
   - macroMap: {fileID: 11400000, guid: b9df6cff972a5c74f99b099a3f7c42dd, type: 2}
   - macroView: {instanceID: 0}
+  - macroGenerator: {instanceID: 0}
+  - runBalance: {fileID: 11400000, guid: bdc5c10a1008ad644b215ae642bd6425, type: 2}
+  - battlePool: {instanceID: 0}
+  - bossPool: {instanceID: 0}
+  - dialogue: {instanceID: 0}
+  - hermitRestDialogue: {instanceID: 0}
+  - playerService: {instanceID: 0}
+  - bestiaryRules: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

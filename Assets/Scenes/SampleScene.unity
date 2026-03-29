@@ -1568,7 +1568,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0.99100006}
-  m_AnchoredPosition: {x: -359, y: 881}
+  m_AnchoredPosition: {x: -363.8, y: 601.5}
   m_SizeDelta: {x: 38, y: 38}
   m_Pivot: {x: 0.49999976, y: 0.5}
 --- !u!114 &790905448
@@ -1583,6 +1583,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b7d396d0a16122a46b718ae16bfb8b7f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  maxVisibleRows: 5
   map: {fileID: 11400000, guid: b9df6cff972a5c74f99b099a3f7c42dd, type: 2}
   cellsRoot: {fileID: 234179231}
   cellPrefab: {fileID: 3154996701494512019, guid: ad4246ac9dd905e43b7b4bc882d37741, type: 3}
@@ -1759,8 +1760,7 @@ MonoBehaviour:
   macroMap: {fileID: 11400000, guid: b9df6cff972a5c74f99b099a3f7c42dd, type: 2}
   macroView: {fileID: 790905448}
   macroGenerator: {fileID: 11400000, guid: ed33694fea8eafc419f64670007df536, type: 2}
-  baseBattleDifficulty: 1
-  baseShopTier: 1
+  runBalance: {fileID: 11400000, guid: 8a01f12be6232d24cbc8030a85d7cdd2, type: 2}
   battlePool: {fileID: 11400000, guid: 3b24d540b770a754ab215a5a1f63a0ab, type: 2}
   bossPool: {fileID: 11400000, guid: 3b24d540b770a754ab215a5a1f63a0ab, type: 2}
   dialogue: {fileID: 708498676}
@@ -2309,7 +2309,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: -209.9, y: 393.4}
+  m_AnchoredPosition: {x: -226.33, y: 369.8}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.49999946, y: 0.49999952}
 --- !u!114 &1116897258
@@ -5133,6 +5133,10 @@ PrefabInstance:
     - target: {fileID: 311345852977269991, guid: 32398b9ae74a0874a9a4809809da4981, type: 3}
       propertyPath: m_Name
       value: MacroCellsRoot
+      objectReference: {fileID: 0}
+    - target: {fileID: 6624534348137220835, guid: 32398b9ae74a0874a9a4809809da4981, type: 3}
+      propertyPath: m_Enabled
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 6624534348137220835, guid: 32398b9ae74a0874a9a4809809da4981, type: 3}
       propertyPath: m_Spacing.x

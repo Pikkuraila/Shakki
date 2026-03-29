@@ -4,46 +4,50 @@ using UnityEngine;
 
 public static class ClassicEncounterFactory
 {
-    [MenuItem("Shakki/Create Classic 8×8 Encounter")]
+    [MenuItem("Shakki/Create Classic 8x8 Encounter")]
     public static void CreateClassic()
     {
-        // Mihin talletetaan asset
         const string folder = "Assets/ScriptableObjects/Meta/Encounter";
         const string assetPath = folder + "/Classic_8x8.asset";
         System.IO.Directory.CreateDirectory(folder);
 
-        // Luo EncounterSO
         var e = ScriptableObject.CreateInstance<EncounterSO>();
         e.name = "Classic_8x8";
 
-        // Käytetään absoluuttisia koordinaatteja (0..7)
-        e.relativeRanks = false;
+        e.requireWhiteKing = true;
+        e.requireBlackKing = true;
 
-        // Sotilaat
-        e.fillWhitePawnsAtY = true; e.whitePawnsY = 1;
-        e.fillBlackPawnsAtY = true; e.blackPawnsY = 6;
+        e.minRecommendedTier = 1;
+        e.maxRecommendedTier = 999;
 
-        // Valkoisen takarivi (y=0)
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="Rook",   x=0, y=0 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="Knight", x=1, y=0 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="Bishop", x=2, y=0 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="Queen",  x=3, y=0 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="King",   x=4, y=0 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="Bishop", x=5, y=0 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="Knight", x=6, y=0 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="white", pieceId="Rook",   x=7, y=0 });
+        // Valkoinen back rank (y=0)
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Rook",   x = 0, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Knight", x = 1, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Bishop", x = 2, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Queen",  x = 3, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "King",   x = 4, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Bishop", x = 5, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Knight", x = 6, y = 0 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Rook",   x = 7, y = 0 });
 
-        // Mustan takarivi (y=7)
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="Rook",   x=0, y=7 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="Knight", x=1, y=7 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="Bishop", x=2, y=7 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="Queen",  x=3, y=7 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="King",   x=4, y=7 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="Bishop", x=5, y=7 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="Knight", x=6, y=7 });
-        e.spawns.Add(new EncounterSO.Spawn { owner="black", pieceId="Rook",   x=7, y=7 });
+        // Valkoinen pawn row (y=1)
+        for (int x = 0; x < 8; x++)
+            e.spawns.Add(new EncounterSO.Spawn { owner = "white", pieceId = "Pawn", x = x, y = 1 });
 
-        // Tallenna asset
+        // Musta pawn row (y=6)
+        for (int x = 0; x < 8; x++)
+            e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Pawn", x = x, y = 6 });
+
+        // Musta back rank (y=7)
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Rook",   x = 0, y = 7 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Knight", x = 1, y = 7 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Bishop", x = 2, y = 7 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Queen",  x = 3, y = 7 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "King",   x = 4, y = 7 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Bishop", x = 5, y = 7 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Knight", x = 6, y = 7 });
+        e.spawns.Add(new EncounterSO.Spawn { owner = "black", pieceId = "Rook",   x = 7, y = 7 });
+
         AssetDatabase.CreateAsset(e, assetPath);
         AssetDatabase.SaveAssets();
         EditorUtility.FocusProjectWindow();
