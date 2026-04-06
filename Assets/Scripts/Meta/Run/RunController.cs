@@ -4,6 +4,7 @@ using UnityEngine;
 using Shakki.Core;
 using System.Linq;
 using Shakki.Meta.Bestiary;
+using TMPro;
 
 public sealed class RunController : MonoBehaviour
 {
@@ -89,6 +90,13 @@ public sealed class RunController : MonoBehaviour
     private BestiaryMatchHooks _bestiaryHooks;
 
     private EnemySpec _pendingEnemySpecOverride;
+
+    [Header("Debug Overlay")]
+    [SerializeField] private TMP_Text debugOverlayText;
+
+    private string _debugCurrentPhase = "Boot";
+    private string _debugEncounterName = "-";
+    private string _debugEncounterSource = "-";
 
 
 
@@ -228,6 +236,9 @@ public sealed class RunController : MonoBehaviour
     private void Start()
     {
         BuildRules();
+        _debugCurrentPhase = "Starting";
+        RefreshDebugOverlay();
+
         Debug.Log($"[RunController] Start macroMap={macroMap}, macroView={macroView}");
 
         if (macroMap != null && macroView != null)
@@ -507,6 +518,11 @@ public sealed class RunController : MonoBehaviour
         {
             Debug.Log($"[Macro VIS] RectTransform anchoredPos={rt.anchoredPosition} localPos={rt.localPosition} sizeDelta={rt.sizeDelta} scale={rt.localScale}");
         }
+
+        _debugCurrentPhase = "Macro";
+        _debugEncounterName = "-";
+        _debugEncounterSource = "Macro";
+        RefreshDebugOverlay();
     }
 
 
@@ -547,6 +563,11 @@ public sealed class RunController : MonoBehaviour
             $"[RunController] MacroAdvance index={newIndex}, row={row}, type={tile.type}, " +
             $"battleDiff={_pendingBattleDifficulty}, shopTier={_pendingShopTier}"
         );
+
+        _debugCurrentPhase = "MacroAdvance";
+        _debugEncounterName = tile.type.ToString();
+        _debugEncounterSource = "MacroTile";
+        RefreshDebugOverlay();
 
         OpenEventFor(tile);
     }
@@ -628,6 +649,11 @@ public sealed class RunController : MonoBehaviour
                 break;
 
             case MacroEventType.Rest:
+                _debugCurrentPhase = "Rest";
+                _debugEncounterName = "Hermit Rest";
+                _debugEncounterSource = "Rest";
+                RefreshDebugOverlay();
+
                 // dialogue -> palauttaa EnterMacroPhase callbackilla
                 if (dialogue != null && hermitRestDialogue != null)
                     dialogue.StartDialogue(hermitRestDialogue, "Hermit", EnterMacroPhase);
@@ -885,6 +911,11 @@ public sealed class RunController : MonoBehaviour
 
         // 8) Aktivoi UI
         if (shopPanel != null) shopPanel.SetActive(true);
+
+        _debugCurrentPhase = "Shop";
+        _debugEncounterName = "-";
+        _debugEncounterSource = "Shop";
+        RefreshDebugOverlay();
     }
 
     // UI-nappi: “Jatka” kaupan jälkeen
@@ -910,6 +941,7 @@ public sealed class RunController : MonoBehaviour
         {
             StartNewEncounter();
         }
+        RefreshDebugOverlay();
     }
 
 
@@ -973,7 +1005,10 @@ public sealed class RunController : MonoBehaviour
         Debug.Log($"[OpenAlchemist] Using loadoutView={lv.name}, active={lv.gameObject.activeInHierarchy}");
         Debug.Log($"dragLayer={(lv.dragLayer != null ? lv.dragLayer.name : "NULL")}");
 
-
+        _debugCurrentPhase = "Alchemist";
+        _debugEncounterName = "-";
+        _debugEncounterSource = "Alchemist";
+        RefreshDebugOverlay();
     }
 
 
@@ -1006,6 +1041,7 @@ public sealed class RunController : MonoBehaviour
             EnterMacroPhase();
         else
             StartNewEncounter();
+        RefreshDebugOverlay();
     }
 
     // RunController.cs
@@ -1141,10 +1177,12 @@ public sealed class RunController : MonoBehaviour
 
 
         // --- A) Macro-eventin antama ENEMY SPEC (budjetti / slots) ---
-        if (_pendingEnemySpecOverride != null)
+                if (_pendingEnemySpecOverride != null)
         {
             var spec = _pendingEnemySpecOverride;
             _pendingEnemySpecOverride = null;
+
+            _debugEncounterSource = "PendingEnemySpec";
 
             EnforceBlackKingInDropSpecIfManyPieces(
                 spec,
@@ -1186,6 +1224,8 @@ public sealed class RunController : MonoBehaviour
         {
             var enemyPreset = _pendingEncounterOverride;
             _pendingEncounterOverride = null;
+
+            _debugEncounterSource = "PresetEncounter";
 
             if (slotMap != null && PlayerService.Instance != null && PlayerService.Instance.Data != null)
             {
@@ -1234,6 +1274,8 @@ public sealed class RunController : MonoBehaviour
         // --- D) Muuten dynaamisesti normaalilla enemySpecillä ---
         else
         {
+            _debugEncounterSource = "DefaultEnemySpec";
+
             EnsureSlotsOnce(16);
             var pdata = PlayerService.Instance.Data;
 
@@ -1265,10 +1307,11 @@ public sealed class RunController : MonoBehaviour
         if (enc == null)
         {
             Debug.LogError("[RunController] Encounter build failed -> using minimal fallback.");
+            _debugEncounterSource = "Fallback";
             enc = BuildMinimalFallbackEncounter();
         }
 
-        
+
 
         Debug.Log($"[RunController] EndRules requireWhiteKing={_state.RequireWhiteKing} requireBlackKing={_state.RequireBlackKing}");
 
@@ -1356,6 +1399,7 @@ public sealed class RunController : MonoBehaviour
 
         // 5) Game over -kuuntelu
         _state.OnGameEnded += OnGameEnded;
+        RefreshDebugOverlay();
     }
 
 
@@ -1397,7 +1441,116 @@ public sealed class RunController : MonoBehaviour
         return e;
     }
 
+    private void RefreshDebugOverlay()
+    {
+        if (debugOverlayText == null)
+            return;
 
+        var ps = PlayerService.Instance;
+        var pd = ps != null ? ps.Data : null;
+
+        int macroIndex = pd != null ? pd.macroIndex : -1;
+
+        int row = -1;
+        int col = -1;
+        string tileType = "-";
+        int difficultyOffset = 0;
+        int shopOffset = 0;
+
+        if (macroMap != null && macroMap.columns > 0 && macroIndex >= 0)
+        {
+            row = macroIndex / macroMap.columns;
+            col = macroIndex % macroMap.columns;
+
+            var tile = macroMap.GetTile(macroIndex);
+            tileType = tile.type.ToString();
+            difficultyOffset = tile.difficultyOffset;
+            shopOffset = tile.shopTierOffset;
+        }
+
+        int whiteCount = 0;
+        int blackCount = 0;
+        int whiteKings = 0;
+        int blackKings = 0;
+
+        if (_state != null)
+        {
+            foreach (var c in _state.AllCoords())
+            {
+                var p = _state.Get(c);
+                if (p == null) continue;
+
+                if (p.Owner == "white")
+                {
+                    whiteCount++;
+                    if (p.TypeName == "King") whiteKings++;
+                }
+                else if (p.Owner == "black")
+                {
+                    blackCount++;
+                    if (p.TypeName == "King") blackKings++;
+                }
+            }
+        }
+
+        var tuning = GetBattleTuningForTier(_pendingBattleDifficulty);
+
+        string loadoutSummary = "-";
+        if (pd != null && pd.loadoutSlots != null && pd.loadoutSlots.Count > 0)
+        {
+            loadoutSummary = string.Join(",", pd.loadoutSlots.ConvertAll(x => string.IsNullOrEmpty(x) ? "-" : x));
+        }
+
+        string enemySpecSummary = "-";
+        var shownSpec = _pendingEnemySpecOverride != null ? _pendingEnemySpecOverride : enemySpec;
+        if (shownSpec != null)
+        {
+            string slots = shownSpec.blackSlots != null
+                ? string.Join(",", shownSpec.blackSlots.Select(x => string.IsNullOrEmpty(x) ? "-" : x))
+                : "-";
+
+            enemySpecSummary =
+                $"mode={shownSpec.mode}, " +
+                $"drop={shownSpec.useDropPlacement}, " +
+                $"forbidRows={shownSpec.forbidWhiteAndAllyRows}, " +
+                $"backBias={shownSpec.backBiasPower:F2}, " +
+                $"fallbackPawns={shownSpec.fallbackFillBlackPawnsRow}, " +
+                $"fallbackRelY={shownSpec.fallbackBlackPawnsRelY}, " +
+                $"blackSlots=[{slots}]";
+        }
+
+        int coins = pd != null ? pd.coins : 0;
+
+        string text =
+            $"PHASE: {_debugCurrentPhase}\n" +
+            $"Encounter: {_debugEncounterName}\n" +
+            $"Encounter Source: {_debugEncounterSource}\n" +
+            $"Battle Tier: {_pendingBattleDifficulty}\n" +
+            $"Shop Tier: {_pendingShopTier}\n" +
+            $"Macro Build Mode: {macroBuildMode}\n" +
+            $"Macro Index: {macroIndex}\n" +
+            $"Macro Row/Col: {row}/{col}\n" +
+            $"Tile Type: {tileType}\n" +
+            $"Tile Difficulty Offset: {difficultyOffset}\n" +
+            $"Tile Shop Offset: {shopOffset}\n" +
+            $"Budget: {tuning.budget}\n" +
+            $"Cap Cost: {tuning.capCost}\n" +
+            $"Cheap Bias: {tuning.cheapPieceBiasPower:F2}\n" +
+            $"Force King Threshold: {tuning.forceBlackKingThreshold}\n" +
+            $"Board: {(_state != null ? _state.Width : 0)}x{(_state != null ? _state.Height : 0)}\n" +
+            $"AI Mode: {aiMode}\n" +
+            $"Require White King: {(_state != null ? _state.RequireWhiteKing : false)}\n" +
+            $"Require Black King: {(_state != null ? _state.RequireBlackKing : false)}\n" +
+            $"White Pieces: {whiteCount} (Kings: {whiteKings})\n" +
+            $"Black Pieces: {blackCount} (Kings: {blackKings})\n" +
+            $"Coins: {coins}\n" +
+            $"Pending Encounter Override: {(_pendingEncounterOverride != null ? _pendingEncounterOverride.name : "-")}\n" +
+            $"Pending EnemySpec Override: {(_pendingEnemySpecOverride != null ? _pendingEnemySpecOverride.mode.ToString() : "-")}\n" +
+            $"Loadout Slots: {loadoutSummary}\n" +
+            $"EnemySpec: {enemySpecSummary}";
+
+        debugOverlayText.text = text;
+    }
 
     public void OnResetButtonPressed()
     {
@@ -1454,6 +1607,16 @@ public sealed class RunController : MonoBehaviour
 
         if (alchemistPanel != null)
             alchemistPanel.SetActive(false);
+
+        _debugCurrentPhase = "Reset";
+        _debugEncounterName = "-";
+        _debugEncounterSource = "ResetRun";
+        RefreshDebugOverlay();
+    }
+
+    public void ForceRefreshDebugOverlay()
+    {
+        RefreshDebugOverlay();
     }
 
     public void RegisterRuntimePieceRules(PieceDefSO runtimeDef)
