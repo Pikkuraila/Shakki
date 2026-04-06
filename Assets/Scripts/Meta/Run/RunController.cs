@@ -321,7 +321,47 @@ public sealed class RunController : MonoBehaviour
     }
 
 
+    public void OnContinueButtonPressed()
+    {
+        Debug.Log("[Debug] Continue pressed");
 
+        // Jos shop auki -> käytä olemassa olevaa jatkoa
+        if (shopPanel != null && shopPanel.activeInHierarchy)
+        {
+            ContinueFromShop();
+            return;
+        }
+
+        // Jos alchemist auki -> käytä olemassa olevaa jatkoa
+        if (alchemistPanel != null && alchemistPanel.activeInHierarchy)
+        {
+            ContinueFromAlchemist();
+            return;
+        }
+
+        // Jos ollaan battlessa, lopeta se testimielessä ja palaa macroon
+        if (boardView != null && boardView.gameObject.activeInHierarchy)
+        {
+            dragController?.CancelActiveDragImmediately();
+
+            if (boardView != null)
+            {
+                boardView.Teardown(destroySelfGO: false);
+                boardView.gameObject.SetActive(false);
+                boardView.enabled = false;
+            }
+
+            if (macroMap != null && macroView != null)
+                EnterMacroPhase();
+            else
+                StartNewEncounter();
+
+            return;
+        }
+
+        // Jos makrossa tai muuten "tyhjässä" tilassa, käynnistä seuraava encounter
+        StartNewEncounter();
+    }
 
     /// <summary>
     /// Makrofase: piilota event-UI:t, näytä makrolauta ja anna pelaajan siirtää nappulaa.
