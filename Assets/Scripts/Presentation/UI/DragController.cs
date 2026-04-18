@@ -9,33 +9,6 @@ using System.Linq;
 using UnityEngine;
 using Shakki.Core;
 
-// --- Pienet rajapinnat loadout/shop-yhteensopivuuteen ---
-public interface ILoadoutAccess
-{
-    string GetTypeAt(int index);
-    void SetTypeAt(int index, string type);
-    void RefreshAll();
-}
-
-public sealed class NullLoadoutAccess : ILoadoutAccess
-{
-    public string GetTypeAt(int index) => null;
-    public void SetTypeAt(int index, string type) { }
-    public void RefreshAll() { }
-}
-
-public interface IShopEconomy
-{
-    bool CanAfford(string typeName);
-    bool TryBuy(string typeName);
-}
-
-public sealed class NullShopEconomy : IShopEconomy
-{
-    public bool CanAfford(string typeName) => true;
-    public bool TryBuy(string typeName) => true;
-}
-
 // --- Varsinainen kontrolleri ---
 public class DragController : MonoBehaviour
 {

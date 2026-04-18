@@ -713,32 +713,6 @@ public class BoardView : MonoBehaviour
         }
     }
 
-    private sealed class DefRegistryRulesResolver : IRulesResolver
-    {
-        private readonly Dictionary<string, PieceDefSO> _defs;
-
-        public DefRegistryRulesResolver(Dictionary<string, PieceDefSO> defs)
-        {
-            _defs = defs;
-        }
-
-        public IEnumerable<IMoveRule> GetRulesFor(string typeName)
-        {
-            if (string.IsNullOrEmpty(typeName) || _defs == null)
-                yield break;
-
-            if (!_defs.TryGetValue(typeName, out var def) || def == null || def.rules == null)
-                yield break;
-
-            foreach (var so in def.rules)
-            {
-                if (so == null) continue;
-                var rule = so.Build();
-                if (rule != null) yield return rule;
-            }
-        }
-    }
-
     private void TriggerAiIfNeeded()
     {
         if (ai != null && _state.CurrentPlayer == "black")
