@@ -44,14 +44,8 @@ namespace Shakki.Meta.Bestiary
             var e = _bestiary.GetEntry(id);
             Debug.Log($"[Bestiary] {id}: seen={e?.seen} kills={e?.kills} unlocks={e?.unlocks}");
 
-            // Resolve intel without needing a real SO instance
-            var fake = ScriptableObject.CreateInstance<EnemyArchetypeSO>();
-            fake.id = id;
-
-            var p = _intel.Resolve(fake, IntelContext.Default);
+            var p = _intel.Resolve(new EnemyIntelSubject(id), IntelContext.Default);
             Debug.Log($"[Intel] {id}: showName={p.showName} showTraits={p.showTraits} moveReveal={p.moveReveal}");
-
-            Destroy(fake);
         }
     }
 }

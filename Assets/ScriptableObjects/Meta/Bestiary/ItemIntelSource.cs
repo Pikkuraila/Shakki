@@ -19,7 +19,7 @@ namespace Shakki.Meta.Bestiary
             _buffs = activeBuffs ?? new HashSet<IntelBuff>();
         }
 
-        public void Apply(ref IntelProfile profile, EnemyArchetypeSO archetype, in IntelContext ctx)
+        public void Apply(ref IntelProfile profile, in EnemyIntelSubject subject, in IntelContext ctx)
         {
             if (_buffs.Contains(IntelBuff.AlwaysShowLegalMovesAllEnemies))
             {

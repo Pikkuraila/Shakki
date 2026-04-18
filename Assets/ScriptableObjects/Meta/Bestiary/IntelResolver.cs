@@ -11,11 +11,11 @@ namespace Shakki.Meta.Bestiary
             if (sources != null) _sources.AddRange(sources);
         }
 
-        public IntelProfile Resolve(EnemyArchetypeSO archetype, in IntelContext ctx)
+        public IntelProfile Resolve(in EnemyIntelSubject subject, in IntelContext ctx)
         {
             var p = IntelProfile.Default;
             for (int i = 0; i < _sources.Count; i++)
-                _sources[i].Apply(ref p, archetype, ctx);
+                _sources[i].Apply(ref p, subject, ctx);
             return p;
         }
     }

@@ -28,6 +28,14 @@ public class BoardView : MonoBehaviour
         return GenerateMovesFrom(_state, new Coord(from.x, from.y)) ?? Enumerable.Empty<Move>();
     }
 
+    public IEnumerable<Move> GenerateLegalMovesFrom((int x, int y) from)
+    {
+        if (_state == null || _rules == null)
+            return Enumerable.Empty<Move>();
+
+        return _state.GenerateLegalMoves(new Coord(from.x, from.y), _rules) ?? Enumerable.Empty<Move>();
+    }
+
     // ----------------------------
     // Board (grid) <-> World helpers
     // ----------------------------

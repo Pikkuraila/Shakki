@@ -2,6 +2,6 @@ namespace Shakki.Meta.Bestiary
 {
     public interface IIntelSource
     {
-        void Apply(ref IntelProfile profile, EnemyArchetypeSO archetype, in IntelContext ctx);
+        void Apply(ref IntelProfile profile, in EnemyIntelSubject subject, in IntelContext ctx);
     }
 }

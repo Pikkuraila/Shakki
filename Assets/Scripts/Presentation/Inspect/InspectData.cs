@@ -1,22 +1,23 @@
-using System;
+ï»¿using System;
 using UnityEngine;
+using Shakki.Meta.Bestiary;
 
 namespace Shakki.Presentation.Inspect
 {
     [Serializable]
     public sealed class InspectData
     {
-        public string id;              // debug / lookup
-        public string title;           // näkyvä nimi
-        public Sprite portrait;        // inner portrait
-        public string[] tags;          // string-tageja UI:lle
-        public string lore;            // voi olla tyhjä
-        public string[] infoLines;   // esim. "Moves like: Rook", "Leaps", "Range: 3" jne
+        public string id;
+        public string title;
+        public Sprite portrait;
+        public string[] tags;
+        public string lore;
+        public string[] infoLines;
 
-
-        // Optional: jos myöhemmin halutaan selection-marker boardille
         public bool hasBoardCoord;
         public int boardX;
         public int boardY;
+
+        public MoveRevealMode moveRevealMode = MoveRevealMode.AlwaysLegal;
     }
 }

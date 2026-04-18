@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Shakki.Core;
+using Shakki.Meta.Bestiary;
 
 namespace Shakki.Presentation.Inspect
 {
     public sealed class InspectController : MonoBehaviour
     {
+        private const string UnknownEnemyName = "Unknown";
+
         [Header("Refs")]
         [SerializeField] private InspectPanelView view;
         [SerializeField] private BoardView boardView;          // jotta voidaan näyttää moves highlight
@@ -16,12 +19,19 @@ namespace Shakki.Presentation.Inspect
         [Header("Behavior")]
         [SerializeField] private bool showMovesOnInspect = true;
 
+        private EnemyIntelService _enemyIntel;
+
 
 
         void OnEnable()
         {
             Debug.Log("[InspectController] OnEnable subscribe");
             InspectService.Changed += OnChanged;
+        }
+
+        void Awake()
+        {
+            _enemyIntel = new EnemyIntelService();
         }
 
         void OnDisable()
@@ -48,7 +58,14 @@ namespace Shakki.Presentation.Inspect
             {
                 boardView.ExternalHighlightsLock = true;
 
-                var moves = boardView.GenerateMovesFrom((data.boardX, data.boardY)).ToList();
+                List<Move> moves;
+                if (data.moveRevealMode >= MoveRevealMode.HoverLegal)
+                    moves = boardView.GenerateLegalMovesFrom((data.boardX, data.boardY)).ToList();
+                else if (data.moveRevealMode >= MoveRevealMode.HoverPseudo)
+                    moves = boardView.GenerateMovesFrom((data.boardX, data.boardY)).ToList();
+                else
+                    moves = new List<Move>();
+
                 boardView.ShowHighlightsPublic(moves);
             }
         }
@@ -71,14 +88,21 @@ namespace Shakki.Presentation.Inspect
 
             var full = BuildFromPieceDef(def);
 
-            // Säilytä alkuperäiset (esim. shopDef.tags) jos niitä oli
-            if (!needsTags && data.tags != null && data.tags.Length > 0)
+            // Säilytä alkuperäiset tagit myös silloin kun tyhjä lista on tietoinen gate.
+            if (data.tags != null)
                 full.tags = data.tags;
+
+            if (!string.IsNullOrWhiteSpace(data.title))
+                full.title = data.title;
+
+            if (data.lore != null)
+                full.lore = data.lore;
 
             // Säilytä mahdolliset board-koordinaatit
             full.hasBoardCoord = data.hasBoardCoord;
             full.boardX = data.boardX;
             full.boardY = data.boardY;
+            full.moveRevealMode = data.moveRevealMode;
 
             return full;
         }
@@ -169,8 +193,50 @@ namespace Shakki.Presentation.Inspect
             data.hasBoardCoord = true;
             data.boardX = pv.X;
             data.boardY = pv.Y;
+            data.moveRevealMode = MoveRevealMode.AlwaysLegal;
+
+            ApplyEnemyIntelIfNeeded(pv, ref data, def);
 
             InspectService.Select(data);
+        }
+
+        private void ApplyEnemyIntelIfNeeded(PieceView pv, ref InspectData data, PieceDefSO def)
+        {
+            if (pv == null || data == null)
+                return;
+
+            string currentPlayer = boardView?.State?.CurrentPlayer ?? "white";
+            bool isEnemy = !string.Equals(pv.Owner, currentPlayer, StringComparison.OrdinalIgnoreCase);
+
+            if (!isEnemy)
+                return;
+
+            var subject = new EnemyIntelSubject(
+                pv.TypeName,
+                def != null ? def.GetDisplayName() : pv.TypeName,
+                null
+            );
+
+            var ctx = new IntelContext
+            {
+                isPlayerTurn = string.Equals(currentPlayer, "white", StringComparison.OrdinalIgnoreCase),
+                inCombat = true
+            };
+
+            var profile = _enemyIntel != null
+                ? _enemyIntel.Resolve(subject, ctx)
+                : IntelProfile.Default;
+
+            if (!profile.showName)
+            {
+                data.title = UnknownEnemyName;
+                data.lore = string.Empty;
+            }
+
+            if (!profile.showTraits)
+                data.tags = Array.Empty<string>();
+
+            data.moveRevealMode = profile.moveReveal;
         }
           
     }
