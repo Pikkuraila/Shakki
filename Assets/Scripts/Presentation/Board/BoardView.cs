@@ -82,42 +82,44 @@ public class BoardView : MonoBehaviour
     // Välimuisti, jotta voidaan siivota/päivittää laattoja
     readonly Dictionary<(int x, int y), GameObject> _tiles = new();
 
+    // Legacy classic-start config is kept serialized for backward compatibility with
+    // existing scene data, but the current runtime path no longer uses it.
     [Header("Start Pieces")]
-    public PieceDefSO WhiteRookDef;
-    public PieceDefSO WhiteKingDef;
-    public PieceDefSO WhiteBishopDef;
-    public PieceDefSO WhiteKnightDef;
-    public PieceDefSO WhitePawnDef;
-    public PieceDefSO WhiteQueenDef;
+    [HideInInspector] public PieceDefSO WhiteRookDef;
+    [HideInInspector] public PieceDefSO WhiteKingDef;
+    [HideInInspector] public PieceDefSO WhiteBishopDef;
+    [HideInInspector] public PieceDefSO WhiteKnightDef;
+    [HideInInspector] public PieceDefSO WhitePawnDef;
+    [HideInInspector] public PieceDefSO WhiteQueenDef;
 
-    public PieceDefSO BlackBishopDef;
-    public PieceDefSO BlackKnightDef;
-    public PieceDefSO BlackPawnDef;
-    public PieceDefSO BlackRookDef;
-    public PieceDefSO BlackKingDef;
-    public PieceDefSO BlackQueenDef;
+    [HideInInspector] public PieceDefSO BlackBishopDef;
+    [HideInInspector] public PieceDefSO BlackKnightDef;
+    [HideInInspector] public PieceDefSO BlackPawnDef;
+    [HideInInspector] public PieceDefSO BlackRookDef;
+    [HideInInspector] public PieceDefSO BlackKingDef;
+    [HideInInspector] public PieceDefSO BlackQueenDef;
 
     [Header("Custom Pieces")]
-    public PieceDefSO WhiteAlfilDef;
-    public PieceDefSO BlackAlfilDef;
-    public PieceDefSO WhiteDabbabaDef;
-    public PieceDefSO BlackDabbabaDef;
-    public PieceDefSO WhiteWazirDef;
-    public PieceDefSO BlackWazirDef;
-    public PieceDefSO WhiteKnightmareDef;
-    public PieceDefSO BlackKnightmareDef;
-    public PieceDefSO WhiteCannonDef;
-    public PieceDefSO BlackCannonDef;
-    public PieceDefSO WhiteGrasshopperDef;
-    public PieceDefSO BlackGrasshopperDef;
-    public PieceDefSO WhiteAmazonDef;
-    public PieceDefSO BlackAmazonDef;
-    public PieceDefSO WhiteEmpressDef;
-    public PieceDefSO BlackEmpressDef;
-    public PieceDefSO WhiteArchbishopDef;
-    public PieceDefSO BlackArchbishopDef;
-    public PieceDefSO WhiteJokerDef;
-    public PieceDefSO BlackJokerDef;
+    [HideInInspector] public PieceDefSO WhiteAlfilDef;
+    [HideInInspector] public PieceDefSO BlackAlfilDef;
+    [HideInInspector] public PieceDefSO WhiteDabbabaDef;
+    [HideInInspector] public PieceDefSO BlackDabbabaDef;
+    [HideInInspector] public PieceDefSO WhiteWazirDef;
+    [HideInInspector] public PieceDefSO BlackWazirDef;
+    [HideInInspector] public PieceDefSO WhiteKnightmareDef;
+    [HideInInspector] public PieceDefSO BlackKnightmareDef;
+    [HideInInspector] public PieceDefSO WhiteCannonDef;
+    [HideInInspector] public PieceDefSO BlackCannonDef;
+    [HideInInspector] public PieceDefSO WhiteGrasshopperDef;
+    [HideInInspector] public PieceDefSO BlackGrasshopperDef;
+    [HideInInspector] public PieceDefSO WhiteAmazonDef;
+    [HideInInspector] public PieceDefSO BlackAmazonDef;
+    [HideInInspector] public PieceDefSO WhiteEmpressDef;
+    [HideInInspector] public PieceDefSO BlackEmpressDef;
+    [HideInInspector] public PieceDefSO WhiteArchbishopDef;
+    [HideInInspector] public PieceDefSO BlackArchbishopDef;
+    [HideInInspector] public PieceDefSO WhiteJokerDef;
+    [HideInInspector] public PieceDefSO BlackJokerDef;
 
     [Header("Def Registry")]
     public List<PieceDefSO> AllPieceDefs = new(); // vedä tänne kaikki käyttämäsi PieceDefSO:t
@@ -285,45 +287,6 @@ public class BoardView : MonoBehaviour
             Trace("StartCoroutine(DoAiMove)");
             StartCoroutine(DoAiMove());
         }
-    }
-
-    public void SetupClassicStart()
-    {
-        // Valkoinen
-        _state.Set(new Coord(0, 0), WhiteRookDef.Build("white"));
-        _state.Set(new Coord(4, 0), WhiteKingDef.Build("white"));
-        _state.Set(new Coord(3, 0), WhiteQueenDef.Build("white"));
-        _state.Set(new Coord(7, 0), WhiteRookDef.Build("white"));
-        _state.Set(new Coord(2, 0), WhiteBishopDef.Build("white"));
-        _state.Set(new Coord(5, 0), WhiteBishopDef.Build("white"));
-        _state.Set(new Coord(1, 0), WhiteKnightDef.Build("white"));
-        _state.Set(new Coord(6, 0), WhiteKnightDef.Build("white"));
-        _state.Set(new Coord(0, 1), WhitePawnDef.Build("white"));
-        _state.Set(new Coord(1, 1), WhitePawnDef.Build("white"));
-        _state.Set(new Coord(2, 1), WhitePawnDef.Build("white"));
-        _state.Set(new Coord(3, 1), WhitePawnDef.Build("white"));
-        _state.Set(new Coord(4, 1), WhitePawnDef.Build("white"));
-        _state.Set(new Coord(5, 1), WhitePawnDef.Build("white"));
-        _state.Set(new Coord(6, 1), WhitePawnDef.Build("white"));
-        _state.Set(new Coord(7, 1), WhitePawnDef.Build("white"));
-
-        // Musta
-        _state.Set(new Coord(0, 7), BlackRookDef.Build("black"));
-        _state.Set(new Coord(3, 7), BlackKingDef.Build("black"));
-        _state.Set(new Coord(4, 7), BlackQueenDef.Build("black"));
-        _state.Set(new Coord(7, 7), BlackRookDef.Build("black"));
-        _state.Set(new Coord(2, 7), BlackBishopDef.Build("black"));
-        _state.Set(new Coord(5, 7), BlackBishopDef.Build("black"));
-        _state.Set(new Coord(1, 7), BlackKnightDef.Build("black"));
-        _state.Set(new Coord(6, 7), BlackKnightDef.Build("black"));
-        _state.Set(new Coord(0, 6), BlackPawnDef.Build("black"));
-        _state.Set(new Coord(1, 6), BlackPawnDef.Build("black"));
-        _state.Set(new Coord(2, 6), BlackPawnDef.Build("black"));
-        _state.Set(new Coord(3, 6), BlackPawnDef.Build("black"));
-        _state.Set(new Coord(4, 6), BlackPawnDef.Build("black"));
-        _state.Set(new Coord(5, 6), BlackPawnDef.Build("black"));
-        _state.Set(new Coord(6, 6), BlackPawnDef.Build("black"));
-        _state.Set(new Coord(7, 6), BlackPawnDef.Build("black"));
     }
 
     // Pidä nämä public/serialized kentät BoardViewissä:
