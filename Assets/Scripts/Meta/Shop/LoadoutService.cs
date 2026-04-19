@@ -79,11 +79,7 @@ public sealed class LoadoutService
         // Varmista että _flat on olemassa jottei null-viitteitä synny
         if (_flat == null) EnsureLoadoutSize();
 
-        _player.Data.loadout = _flat
-            .Where(id => !string.IsNullOrEmpty(id))
-            .GroupBy(id => id)
-            .Select(g => new LoadoutEntry { pieceId = g.Key, count = g.Count() })
-            .ToList();
+        _player.SetLoadoutSlotPieceIds(_flat, _flat?.Count ?? PlayerInstanceSync.DefaultLoadoutSlotCount);
     }
 
     // Slot-apurit (UI käyttää näitä)
@@ -115,9 +111,7 @@ public sealed class LoadoutService
         int slotCount =
             _player.Data?.loadoutSlotInstances != null && _player.Data.loadoutSlotInstances.Count > 0
                 ? _player.Data.loadoutSlotInstances.Count
-                : (_player.Data?.loadoutSlots != null && _player.Data.loadoutSlots.Count > 0
-                    ? _player.Data.loadoutSlots.Count
-                    : PlayerInstanceSync.DefaultLoadoutSlotCount);
+                : PlayerInstanceSync.DefaultLoadoutSlotCount;
 
         if (slotIndex < 0 || slotIndex >= slotCount) return false;
         if (string.IsNullOrEmpty(_player.GetLoadoutPieceIdAtSlot(slotIndex, slotCount))) return false; // tyhjässä ei ole nappulaa

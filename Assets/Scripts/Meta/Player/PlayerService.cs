@@ -173,6 +173,39 @@ public sealed class PlayerService : MonoBehaviour
     {
         if (string.IsNullOrEmpty(pieceId) || amount <= 0) return false;
 
+        if (HasAuthoritativeInstanceModelForCurrentSlots())
+        {
+            EnsurePieceInstanceModel();
+
+            var targets = OrderInstancesForLegacyMutation(
+                    GetAliveInstancesByLegacyPieceId(pieceId),
+                    preferHealthyFirst: true)
+                .Take(amount)
+                .ToList();
+
+            if (targets.Count == 0)
+                return false;
+
+            foreach (var target in targets)
+            {
+                target.isDead = true;
+
+                if (Data?.loadoutSlotInstances == null)
+                    continue;
+
+                foreach (var slot in Data.loadoutSlotInstances)
+                {
+                    if (slot != null && slot.pieceInstanceId == target.instanceId)
+                        slot.pieceInstanceId = string.Empty;
+                }
+            }
+
+            Debug.Log($"[Permadeath] Removed permanently(instance): {pieceId} x{targets.Count}");
+            OnChanged?.Invoke();
+            SaveFromInstanceModel();
+            return true;
+        }
+
         bool changed = false;
         int remainingToRemove = amount;
 
@@ -278,6 +311,32 @@ public sealed class PlayerService : MonoBehaviour
         EnsurePieceInstanceModel();
         var slot = Data?.loadoutSlotInstances?.Find(x => x != null && x.slotIndex == slotIndex);
         return slot != null ? PlayerInstanceSync.FindAliveInstance(Data, slot.pieceInstanceId) : null;
+    }
+
+    public void SetLoadoutSlotPieceIds(IEnumerable<string> slotPieceIds, int totalSlots = PlayerInstanceSync.DefaultLoadoutSlotCount)
+    {
+        if (Data == null)
+            return;
+
+        if (totalSlots <= 0)
+            totalSlots = Data.loadoutSlotInstances?.Count ?? Data.loadoutSlots?.Count ?? PlayerInstanceSync.DefaultLoadoutSlotCount;
+
+        var normalizedSlots = NormalizeSlotPieceIds(slotPieceIds, totalSlots);
+
+        if (HasAuthoritativeInstanceModel(totalSlots))
+        {
+            PlayerInstanceSync.EnsureInitialized(Data, totalSlots);
+            Data.loadoutSlots = normalizedSlots;
+            PlayerInstanceSync.SyncInstancesFromLegacy(Data, totalSlots);
+            SaveFromInstanceModel();
+        }
+        else
+        {
+            Data.loadoutSlots = normalizedSlots;
+            SaveFromLegacyData();
+        }
+
+        OnChanged?.Invoke();
     }
 
     public bool SwapLoadoutInstances(int slotIndexA, int slotIndexB)
@@ -419,9 +478,70 @@ public sealed class PlayerService : MonoBehaviour
             Data.injuredPieces = new List<InjuredPieceStack>();
     }
 
+    private bool HasAuthoritativeInstanceModelForCurrentSlots()
+    {
+        int totalSlots = Data?.loadoutSlotInstances?.Count ?? PlayerInstanceSync.DefaultLoadoutSlotCount;
+        if (totalSlots <= 0)
+            totalSlots = PlayerInstanceSync.DefaultLoadoutSlotCount;
+
+        return HasAuthoritativeInstanceModel(totalSlots);
+    }
+
+    private IEnumerable<PieceInstanceData> GetAliveInstancesByLegacyPieceId(string pieceId)
+    {
+        if (string.IsNullOrEmpty(pieceId) || Data?.pieceInstances == null)
+            return Enumerable.Empty<PieceInstanceData>();
+
+        return Data.pieceInstances.Where(x =>
+            x != null &&
+            !x.isDead &&
+            string.Equals(PlayerInstanceSync.GetLegacyPieceId(x), pieceId, StringComparison.Ordinal));
+    }
+
+    private HashSet<string> GetSlottedInstanceIds()
+    {
+        if (Data?.loadoutSlotInstances == null)
+            return new HashSet<string>(StringComparer.Ordinal);
+
+        return Data.loadoutSlotInstances
+            .Where(x => x != null && !string.IsNullOrEmpty(x.pieceInstanceId))
+            .Select(x => x.pieceInstanceId)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private IEnumerable<PieceInstanceData> OrderInstancesForLegacyMutation(
+        IEnumerable<PieceInstanceData> instances,
+        bool preferHealthyFirst)
+    {
+        var slotted = GetSlottedInstanceIds();
+
+        return instances
+            .Where(x => x != null)
+            .OrderBy(x => slotted.Contains(x.instanceId) ? 0 : 1)
+            .ThenBy(x =>
+            {
+                bool isWounded = PlayerInstanceSync.HasStatus(x, PlayerInstanceSync.WoundedStatusId);
+                if (preferHealthyFirst)
+                    return isWounded ? 1 : 0;
+
+                return isWounded ? 0 : 1;
+            })
+            .ThenBy(x => x.instanceId);
+    }
+
     private int GetTotalLoadoutCount(string pieceId)
     {
-        if (string.IsNullOrEmpty(pieceId) || Data.loadout == null) return 0;
+        if (string.IsNullOrEmpty(pieceId))
+            return 0;
+
+        if (HasAuthoritativeInstanceModelForCurrentSlots())
+        {
+            EnsurePieceInstanceModel();
+            return GetAliveInstancesByLegacyPieceId(pieceId).Count();
+        }
+
+        if (Data.loadout == null)
+            return 0;
 
         int total = 0;
         for (int i = 0; i < Data.loadout.Count; i++)
@@ -435,8 +555,17 @@ public sealed class PlayerService : MonoBehaviour
 
     public int GetInjuredCount(string pieceId)
     {
+        if (string.IsNullOrEmpty(pieceId))
+            return 0;
+
+        if (HasAuthoritativeInstanceModelForCurrentSlots())
+        {
+            EnsurePieceInstanceModel();
+            return GetAliveInstancesByLegacyPieceId(pieceId)
+                .Count(x => PlayerInstanceSync.HasStatus(x, PlayerInstanceSync.WoundedStatusId));
+        }
+
         EnsureInjuryList();
-        if (string.IsNullOrEmpty(pieceId)) return 0;
 
         var s = Data.injuredPieces.Find(x => x != null && x.pieceId == pieceId);
         return s != null ? Mathf.Max(0, s.count) : 0;
@@ -453,6 +582,23 @@ public sealed class PlayerService : MonoBehaviour
 
     public IReadOnlyList<LoadoutEntry> GetHealthyLoadout()
     {
+        if (HasAuthoritativeInstanceModelForCurrentSlots())
+        {
+            EnsurePieceInstanceModel();
+
+            return Data.pieceInstances
+                .Where(x => x != null && !x.isDead && !PlayerInstanceSync.HasStatus(x, PlayerInstanceSync.WoundedStatusId))
+                .GroupBy(PlayerInstanceSync.GetLegacyPieceId)
+                .Where(g => !string.IsNullOrEmpty(g.Key))
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new LoadoutEntry
+                {
+                    pieceId = g.Key,
+                    count = g.Count()
+                })
+                .ToList();
+        }
+
         var result = new List<LoadoutEntry>();
         if (Data.loadout == null) return result;
 
@@ -478,6 +624,30 @@ public sealed class PlayerService : MonoBehaviour
     {
         if (string.IsNullOrEmpty(pieceId) || amount <= 0) return;
 
+        if (HasAuthoritativeInstanceModelForCurrentSlots())
+        {
+            EnsurePieceInstanceModel();
+
+            var targets = OrderInstancesForLegacyMutation(
+                    GetAliveInstancesByLegacyPieceId(pieceId)
+                        .Where(x => !PlayerInstanceSync.HasStatus(x, PlayerInstanceSync.WoundedStatusId)),
+                    preferHealthyFirst: true)
+                .Take(amount)
+                .ToList();
+
+            if (targets.Count == 0)
+                return;
+
+            foreach (var target in targets)
+                PlayerInstanceSync.SetStatus(target, PlayerInstanceSync.WoundedStatusId, true);
+
+            Debug.Log($"[Injury] Marked injured(instance): {pieceId} +{targets.Count} => injured={GetInjuredCount(pieceId)}/{GetTotalLoadoutCount(pieceId)}");
+
+            SaveFromInstanceModel();
+            OnChanged?.Invoke();
+            return;
+        }
+
         EnsureInjuryList();
 
         int totalOwnedInLoadout = GetTotalLoadoutCount(pieceId);
@@ -502,6 +672,30 @@ public sealed class PlayerService : MonoBehaviour
     {
         if (string.IsNullOrEmpty(pieceId) || amount <= 0) return;
 
+        if (HasAuthoritativeInstanceModelForCurrentSlots())
+        {
+            EnsurePieceInstanceModel();
+
+            var targets = OrderInstancesForLegacyMutation(
+                    GetAliveInstancesByLegacyPieceId(pieceId)
+                        .Where(x => PlayerInstanceSync.HasStatus(x, PlayerInstanceSync.WoundedStatusId)),
+                    preferHealthyFirst: false)
+                .Take(amount)
+                .ToList();
+
+            if (targets.Count == 0)
+                return;
+
+            foreach (var target in targets)
+                PlayerInstanceSync.SetStatus(target, PlayerInstanceSync.WoundedStatusId, false);
+
+            Debug.Log($"[Injury] Healed(instance): {pieceId} -{targets.Count} => injured={GetInjuredCount(pieceId)}");
+
+            SaveFromInstanceModel();
+            OnChanged?.Invoke();
+            return;
+        }
+
         EnsureInjuryList();
 
         var s = Data.injuredPieces.Find(x => x != null && x.pieceId == pieceId);
@@ -519,6 +713,28 @@ public sealed class PlayerService : MonoBehaviour
 
     public void HealAllPieces()
     {
+        if (HasAuthoritativeInstanceModelForCurrentSlots())
+        {
+            EnsurePieceInstanceModel();
+
+            bool changed = false;
+            foreach (var instance in Data.pieceInstances.Where(x => x != null && !x.isDead))
+            {
+                if (!PlayerInstanceSync.HasStatus(instance, PlayerInstanceSync.WoundedStatusId))
+                    continue;
+
+                PlayerInstanceSync.SetStatus(instance, PlayerInstanceSync.WoundedStatusId, false);
+                changed = true;
+            }
+
+            if (!changed)
+                return;
+
+            OnChanged?.Invoke();
+            SaveFromInstanceModel();
+            return;
+        }
+
         EnsureInjuryList();
         Data.injuredPieces.Clear();
         OnChanged?.Invoke();
@@ -791,5 +1007,18 @@ public sealed class PlayerService : MonoBehaviour
         }
 
         _store.Save(Data);
+    }
+
+    private static List<string> NormalizeSlotPieceIds(IEnumerable<string> slotPieceIds, int totalSlots)
+    {
+        var normalized = (slotPieceIds ?? Enumerable.Empty<string>())
+            .Take(Math.Max(0, totalSlots))
+            .Select(x => x ?? string.Empty)
+            .ToList();
+
+        while (normalized.Count < totalSlots)
+            normalized.Add(string.Empty);
+
+        return normalized;
     }
 }

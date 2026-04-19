@@ -237,7 +237,6 @@ public class LoadoutGridView : MonoBehaviour
         if (hasAuthoritativeInstanceModel)
         {
             PlayerInstanceSync.EnsureInitialized(PD, count);
-            PlayerInstanceSync.SyncLegacyFromInstances(PD, count);
         }
         else
         {
@@ -418,14 +417,11 @@ public class LoadoutGridView : MonoBehaviour
 
     string GetTypeAt(int dataIndex)
     {
-        var instance = GetInstanceAt(dataIndex);
-        if (instance != null)
-            return PlayerInstanceSync.GetLegacyPieceId(instance);
+        if (PS == null)
+            return string.Empty;
 
-        if (PD == null || PD.loadoutSlots == null) return "";
-        var slots = PD.loadoutSlots;
-        if (dataIndex < 0 || dataIndex >= slots.Count) return "";
-        return slots[dataIndex] ?? "";
+        int slotCount = _slots.Count > 0 ? _slots.Count : boardWidth * boardHeight;
+        return PS.GetLoadoutPieceIdAtSlot(dataIndex, slotCount);
     }
 
     public void HandleDropToLoadout(DropSlot target, UIDraggablePiece drag)
