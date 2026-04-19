@@ -27,7 +27,7 @@ namespace Shakki.Meta.Bestiary
 
         public bool IsMoveKnown(string archetypeId)
         {
-            archetypeId = Norm(archetypeId);
+            archetypeId = BestiaryIds.Normalize(archetypeId);
 
             var e = GetOrCreate(archetypeId);
             return e != null && (e.unlocks & BestiaryUnlock.MoveKnown) != 0;
@@ -38,18 +38,7 @@ namespace Shakki.Meta.Bestiary
         {
             _data = _store?.Load() ?? new BestiarySaveData();
             _index.Clear();
-
-            if (_data.entries != null)
-            {
-                foreach (var e in _data.entries)
-                {
-                    if (e == null || string.IsNullOrEmpty(e.archetypeId)) continue;
-                    _index[e.archetypeId] = e;
-
-                    // ensure unlocks are consistent with counts
-                    _rules?.ApplyProgress(e);
-                }
-            }
+            NormalizeLoadedEntries();
 
             Save(); // normalize once
         }
@@ -61,6 +50,7 @@ namespace Shakki.Meta.Bestiary
 
         public BestiaryEntrySave GetOrCreate(string archetypeId)
         {
+            archetypeId = BestiaryIds.Normalize(archetypeId);
             if (string.IsNullOrEmpty(archetypeId))
                 return null;
 
@@ -101,8 +91,6 @@ namespace Shakki.Meta.Bestiary
 
         public void RecordKill(string archetypeId, int amount = 1)
         {
-            archetypeId = Norm(archetypeId);
-
             var e = GetOrCreate(archetypeId);
             if (e == null) return;
 
@@ -115,17 +103,9 @@ namespace Shakki.Meta.Bestiary
             Save();
         }
 
-        private static string Norm(string id)
-        {
-            if (string.IsNullOrEmpty(id)) return id;
-            // Tavoite: "Pawn" "Rook" jne (PascalCase)
-            // Jos haluat tiukemman mappingin myöhemmin, tee dict.
-            return char.ToUpperInvariant(id[0]) + id.Substring(1);
-        }
-
-
         public bool HasUnlock(string archetypeId, BestiaryUnlock unlock)
         {
+            archetypeId = BestiaryIds.Normalize(archetypeId);
             var e = GetOrCreate(archetypeId);
             if (e == null) return false;
             return (e.unlocks & unlock) != 0;
@@ -133,8 +113,46 @@ namespace Shakki.Meta.Bestiary
 
         public BestiaryEntrySave GetEntry(string archetypeId)
         {
+            archetypeId = BestiaryIds.Normalize(archetypeId);
             if (string.IsNullOrEmpty(archetypeId)) return null;
             return _index.TryGetValue(archetypeId, out var e) ? e : null;
+        }
+
+        private void NormalizeLoadedEntries()
+        {
+            var normalizedEntries = new List<BestiaryEntrySave>();
+            if (_data.entries == null)
+            {
+                _data.entries = normalizedEntries;
+                return;
+            }
+
+            foreach (var entry in _data.entries)
+            {
+                if (entry == null)
+                    continue;
+
+                var archetypeId = BestiaryIds.Normalize(entry.archetypeId);
+                if (string.IsNullOrEmpty(archetypeId))
+                    continue;
+
+                if (_index.TryGetValue(archetypeId, out var existing) && existing != null)
+                {
+                    existing.seen += entry.seen;
+                    existing.kills += entry.kills;
+                    existing.unlocks |= entry.unlocks;
+                    continue;
+                }
+
+                entry.archetypeId = archetypeId;
+                _index[archetypeId] = entry;
+                normalizedEntries.Add(entry);
+            }
+
+            foreach (var entry in normalizedEntries)
+                _rules?.ApplyProgress(entry);
+
+            _data.entries = normalizedEntries;
         }
     }
 

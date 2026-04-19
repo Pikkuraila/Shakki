@@ -89,7 +89,7 @@ namespace Shakki.Meta.Bestiary
                 {
                     newlySeen++;
                     Debug.Log($"[Bestiary] SEEN +1 → {p.TypeName} at {c}");
-                    _bestiary.RecordSeen(NormalizeArchetypeId(p.TypeName), 1);
+                    _bestiary.RecordSeen(BestiaryIds.Normalize(p.TypeName), 1);
                 }
                 else
                 {
@@ -107,21 +107,7 @@ namespace Shakki.Meta.Bestiary
 
             // Only count enemy deaths (player kills)
             if (captured.Owner == _enemyOwner)
-                _bestiary.RecordKill(NormalizeArchetypeId(captured.TypeName), 1);
-        }
-
-        private static string NormalizeArchetypeId(string typeName)
-        {
-            if (string.IsNullOrWhiteSpace(typeName))
-                return "";
-
-            typeName = typeName.Trim();
-
-            // Canonical: PascalCase ("Pawn", "Rook", "Amazon", ...)
-            if (typeName.Length == 1)
-                return typeName.ToUpperInvariant();
-
-            return char.ToUpperInvariant(typeName[0]) + typeName.Substring(1);
+                _bestiary.RecordKill(BestiaryIds.Normalize(captured.TypeName), 1);
         }
 
     }

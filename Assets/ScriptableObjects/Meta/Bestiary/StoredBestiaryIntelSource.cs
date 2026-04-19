@@ -19,7 +19,7 @@ namespace Shakki.Meta.Bestiary
                 return;
 
             var data = _store.Load();
-            var normId = Normalize(subject.id);
+            var normId = BestiaryIds.Normalize(subject.id);
 
             if (data?.entries == null)
                 return;
@@ -30,7 +30,7 @@ namespace Shakki.Meta.Bestiary
                 if (entry == null || string.IsNullOrEmpty(entry.archetypeId))
                     continue;
 
-                if (Normalize(entry.archetypeId) != normId)
+                if (BestiaryIds.Normalize(entry.archetypeId) != normId)
                     continue;
 
                 if ((entry.unlocks & BestiaryUnlock.NameKnown) != 0)
@@ -44,14 +44,6 @@ namespace Shakki.Meta.Bestiary
 
                 return;
             }
-        }
-
-        private static string Normalize(string id)
-        {
-            if (string.IsNullOrEmpty(id))
-                return id;
-
-            return char.ToUpperInvariant(id[0]) + id.Substring(1);
         }
     }
 }
