@@ -25,6 +25,17 @@ namespace Shakki.Meta.Bestiary
         public IntelProfile Resolve(string enemyId, in IntelContext ctx)
             => Resolve(new EnemyIntelSubject(enemyId), ctx);
 
+        public IntelProfile ResolveInCombat(string enemyId, bool isPlayerTurn)
+        {
+            var ctx = new IntelContext
+            {
+                isPlayerTurn = isPlayerTurn,
+                inCombat = true
+            };
+
+            return Resolve(enemyId, ctx);
+        }
+
         public IntelProfile Resolve(in EnemyIntelSubject subject, in IntelContext ctx)
             => _resolver.Resolve(subject, ctx);
 

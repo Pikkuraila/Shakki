@@ -211,16 +211,10 @@ namespace Shakki.Presentation.Inspect
             if (!isEnemy)
                 return;
 
-            var subject = new EnemyIntelSubject(pv.TypeName);
-
-            var ctx = new IntelContext
-            {
-                isPlayerTurn = string.Equals(currentPlayer, "white", StringComparison.OrdinalIgnoreCase),
-                inCombat = true
-            };
-
             var profile = _enemyIntel != null
-                ? _enemyIntel.Resolve(subject, ctx)
+                ? _enemyIntel.ResolveInCombat(
+                    pv.TypeName,
+                    string.Equals(currentPlayer, "white", StringComparison.OrdinalIgnoreCase))
                 : IntelProfile.Default;
 
             if (!profile.showName)

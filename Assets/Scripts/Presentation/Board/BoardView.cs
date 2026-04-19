@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Shakki.Core;
 using System.Linq;
+using Shakki.Meta.Bestiary;
 
 public class BoardView : MonoBehaviour
 {
@@ -137,13 +138,17 @@ public class BoardView : MonoBehaviour
     private readonly Dictionary<(int, int), PieceView> _pieceViews = new();
     private readonly List<GameObject> _highlights = new();
     private Coord? _selected;
+    private EnemyIntelService _enemyIntel;
 
-    // --- Intel hooks (injected from RunController) ---
+    // Prefer MoveRevealMode-based intel. The bool gate is kept only as a
+    // temporary compatibility fallback for older callers.
+    public System.Func<PieceView, MoveRevealMode> ResolveEnemyMoveRevealOnHover;
     public System.Func<PieceView, bool> CanRevealEnemyMovesOnHover;
     public System.Func<PieceView, bool> CanPlayerMoveEnemyPiece;
 
     private PieceView _hoverPV;
     private (int x, int y)? _hoverBoard;
+    private MoveRevealMode _hoverRevealMode = MoveRevealMode.None;
     private List<Move> _hoverMoves = new();
 
     public enum AiMode
@@ -186,6 +191,8 @@ public class BoardView : MonoBehaviour
     {
         EnsureRuntimeRoots();
         _defByType.Clear();
+        if (_enemyIntel == null)
+            _enemyIntel = new EnemyIntelService();
         foreach (var def in AllPieceDefs)
         {
             if (def == null || string.IsNullOrEmpty(def.typeName)) continue;
@@ -220,28 +227,53 @@ public class BoardView : MonoBehaviour
         }
 
         bool isEnemy = pv.Owner != _state.CurrentPlayer;
+        var revealMode = ResolveHoverRevealMode(pv, isEnemy);
 
-        if (isEnemy)
+        if (revealMode < MoveRevealMode.HoverPseudo)
         {
-            bool allowed = (CanRevealEnemyMovesOnHover != null) && CanRevealEnemyMovesOnHover(pv);
-            if (!allowed)
-            {
-                ClearHoverHighlightsIfNeeded();
-                return;
-            }
+            ClearHoverHighlightsIfNeeded();
+            return;
         }
 
         // Jos hover on sama ruutu kuin viime frame, ei lasketa uudestaan
-        if (_hoverBoard.HasValue && _hoverBoard.Value.x == c.x && _hoverBoard.Value.y == c.y)
+        if (_hoverBoard.HasValue &&
+            _hoverBoard.Value.x == c.x &&
+            _hoverBoard.Value.y == c.y &&
+            _hoverRevealMode == revealMode)
             return;
 
         _hoverBoard = c;
         _hoverPV = pv;
+        _hoverRevealMode = revealMode;
 
-        // Legal moves (sama kuin muu peli)
-        _hoverMoves = _state.GenerateLegalMoves(new Coord(c.x, c.y), _rules)?.ToList() ?? new List<Move>();
+        if (revealMode >= MoveRevealMode.HoverLegal)
+            _hoverMoves = _state.GenerateLegalMoves(new Coord(c.x, c.y), _rules)?.ToList() ?? new List<Move>();
+        else
+            _hoverMoves = GenerateMovesFrom(_state, new Coord(c.x, c.y))?.ToList() ?? new List<Move>();
 
         ShowHighlightsPublic(_hoverMoves);
+    }
+
+    private MoveRevealMode ResolveHoverRevealMode(PieceView pv, bool isEnemy)
+    {
+        if (!isEnemy)
+            return MoveRevealMode.AlwaysLegal;
+
+        if (ResolveEnemyMoveRevealOnHover != null)
+            return ResolveEnemyMoveRevealOnHover(pv);
+
+        if (_enemyIntel != null && pv != null)
+        {
+            string currentPlayer = _state?.CurrentPlayer ?? "white";
+            return _enemyIntel.ResolveInCombat(
+                pv.TypeLabel,
+                string.Equals(currentPlayer, "white", System.StringComparison.OrdinalIgnoreCase)).moveReveal;
+        }
+
+        if (CanRevealEnemyMovesOnHover != null && CanRevealEnemyMovesOnHover(pv))
+            return MoveRevealMode.HoverLegal;
+
+        return MoveRevealMode.None;
     }
 
     private void ClearHoverHighlightsIfNeeded()
@@ -250,6 +282,7 @@ public class BoardView : MonoBehaviour
         {
             _hoverBoard = null;
             _hoverPV = null;
+            _hoverRevealMode = MoveRevealMode.None;
             _hoverMoves.Clear();
             ClearHighlightsPublic();
         }
