@@ -21,6 +21,7 @@ public sealed class UIDraggablePiece :
     public string pieceInstanceId;
 
     public ShopItemDefSO shopDef;
+    public RunController runController;
 
     [Header("Drag Layer (Canvas child)")]
     public RectTransform dragLayer;      // jätä tyhjäksi → luodaan/runtime
@@ -246,6 +247,18 @@ public sealed class UIDraggablePiece :
 
             try { AnyDragEnded?.Invoke(); } catch { }
 
+            Destroy(gameObject);
+            return;
+        }
+
+        if (payloadKind == DragPayloadKind.Item &&
+            originKind == SlotKind.Inventory &&
+            runController != null &&
+            runController.TryHandleBoardItemDrop(this, e))
+        {
+            _dragging = false;
+            s_IsDraggingAny = false;
+            try { AnyDragEnded?.Invoke(); } catch { }
             Destroy(gameObject);
             return;
         }

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace Shakki.Core
 {
-    /// Hopper: hypp‰‰ yli l‰himm‰n nappulan annetussa suunnassa ja yritt‰‰ laskeutua sen j‰lkeen.
+    /// Hopper: hypp√§√§ yli l√§himm√§n nappulan annetussa suunnassa ja yritt√§√§ laskeutua sen j√§lkeen.
     /// Esim:
     ///  - Grasshopper: queen-dirs, hopDistance=1, canLandEmpty=true
     ///  - Cannon capture: rook-dirs, hopDistance=1, captureOnlyAfterJump=true, canLandEmpty=false
@@ -47,13 +47,13 @@ namespace Shakki.Core
 
                     if (!foundHurdle)
                     {
-                        // Etsit‰‰n ensimm‰inen este (oma tai vihollinen)
+                        // Etsit√§√§n ensimm√§inen este (oma tai vihollinen)
                         if (q != null) foundHurdle = true;
                         continue;
                     }
 
                     // Laskeutumisruutu on HETI esteen takana *hopDistance* askelta
-                    int lx = (from.X) + dx;  // ensimm‰inen ruutu l‰hdˆn j‰lkeen
+                    int lx = (from.X) + dx;  // ensimm√§inen ruutu l√§hd√∂n j√§lkeen
                     int ly = (from.Y) + dy;
 
                     // mutta me ollaan nyt esteen ruudussa (here = hurdle),
@@ -71,7 +71,7 @@ namespace Shakki.Core
                         if (_canLandEmpty)
                             yield return new Move(from, land);
                     }
-                    else if (target.Owner != me.Owner)
+                    else if (BoardPieceUtility.CanCapture(me, target))
                     {
                         // Cannon-capture (tai muut hopper-capturet)
                         if (!_captureOnlyAfterJump || foundHurdle)

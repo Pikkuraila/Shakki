@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Shakki.Core;
@@ -9,6 +9,7 @@ public sealed class GameCatalogSO : ScriptableObject
     public List<PieceDefSO> pieces;
     public List<UpgradeDefSO> upgrades;
     public List<PowerupDefSO> powerups;
+    public List<ItemDefSO> items;
     public PieceDefSO amalgamBaseDef;
 
     // Runtime pieces created during the run, such as alchemy outputs.
@@ -63,6 +64,20 @@ public sealed class GameCatalogSO : ScriptableObject
         {
             if (powerup != null && powerup.id == id)
                 return powerup;
+        }
+
+        return null;
+    }
+
+    public ItemDefSO GetItemById(string id)
+    {
+        if (string.IsNullOrEmpty(id) || items == null)
+            return null;
+
+        foreach (var item in items)
+        {
+            if (item != null && item.id == id)
+                return item;
         }
 
         return null;

@@ -1,35 +1,3 @@
-%YAML 1.1
-%TAG !u! tag:unity3d.com,2011:
---- !u!114 &11400000
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7d5a740ef589ab74ca0698cde8bd53c8, type: 3}
-  m_Name: GameCatalog
-  m_EditorClassIdentifier: 
-  pieces:
-  - {fileID: 11400000, guid: 85cd5ef668d991043999e6983df9d3f4, type: 2}
-  - {fileID: 11400000, guid: 84ca7c8a65dd2994cbc725f8cb6b667c, type: 2}
-  - {fileID: 11400000, guid: 3d2ddfb07c5134a4fb6b9cd193c86b61, type: 2}
-  - {fileID: 11400000, guid: 7f42dbda1b7f6114a818ca07ffa0b3bd, type: 2}
-  - {fileID: 11400000, guid: 145dbf8cf58644b42bd1020bb6ba58c2, type: 2}
-  - {fileID: 11400000, guid: 40d7ac773a6e5f541810b957506eb345, type: 2}
-  - {fileID: 11400000, guid: 683ba768fd0d511449f207fe49ca236b, type: 2}
-  - {fileID: 11400000, guid: 0d1168925b25aba4f8b6debabaadb206, type: 2}
-  - {fileID: 11400000, guid: a35795a40b2535a48a3897732dc52b81, type: 2}
-  - {fileID: 11400000, guid: 2a452427f3bb82b42a238cb14da578a3, type: 2}
-  - {fileID: 11400000, guid: 27afd10a8d88b9043bbcd64371855b59, type: 2}
-  - {fileID: 11400000, guid: baf8c9509d5301340bae91a44e29beaa, type: 2}
-  - {fileID: 11400000, guid: cb9eba4ddddfb1949832b4d3242a971d, type: 2}
-  - {fileID: 11400000, guid: 8789affb42026024abb4a10f33f5d064, type: 2}
-  - {fileID: 11400000, guid: dd7fd56ba7f8af54eb0615531c307a5b, type: 2}
-  - {fileID: 11400000, guid: b227334994d076849999aaf20e416a9f, type: 2}
-  - {fileID: 11400000, guid: 478ba0d95a07a6240b1cc36070bd2ddb, type: 2}
-  upgrades: []
-  powerups: []
-  amalgamBaseDef: {fileID: 11400000, guid: c02b007b3dc53f84498a27a7f0940ed8, type: 2}
+version https://git-lfs.github.com/spec/v1
+oid sha256:4a1fbc9956525046aaa33d1114ad8d40bdf1a84a75c1a104915012b0ffd3fad7
+size 1903

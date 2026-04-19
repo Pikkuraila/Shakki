@@ -40,14 +40,19 @@ public class BoardView : MonoBehaviour
     // ----------------------------
     // Board (grid) <-> World helpers
     // ----------------------------
-    private Vector3 BoardToWorld(int x, int y, float z = 0f)
+    private Vector3 BoardToLocal(int x, int y, float z = 0f)
         => new Vector3(x * tileSize, y * tileSize, z);
+
+    private Vector3 BoardToWorld(int x, int y, float z = 0f)
+        => transform.TransformPoint(BoardToLocal(x, y, z));
 
     private (int x, int y) WorldToBoard(Vector3 w)
     {
+        var local = transform.InverseTransformPoint(w);
+
         // Robust rounding to nearest tile center when centers are at x*tileSize, y*tileSize
-        int bx = Mathf.FloorToInt((w.x / tileSize) + 0.5f);
-        int by = Mathf.FloorToInt((w.y / tileSize) + 0.5f);
+        int bx = Mathf.FloorToInt((local.x / tileSize) + 0.5f);
+        int by = Mathf.FloorToInt((local.y / tileSize) + 0.5f);
         return (bx, by);
     }
 
@@ -160,12 +165,19 @@ public class BoardView : MonoBehaviour
     [SerializeField] private AiMode aiMode = AiMode.Random;
 
     private IAiPlayer ai;
+    private Transform _originalParent;
+    private Vector3 _originalLocalPosition;
+    private Quaternion _originalLocalRotation;
+    private Vector3 _originalLocalScale;
+    private bool _capturedOriginalTransform;
 
     public void Init(GameState state, IRulesResolver rules, AiMode mode)
     {
         _teardownDone = false;
         enabled = true;
+        EnsureWorldSpaceRoot();
         EnsureRuntimeRoots();
+        NormalizeRuntimeRoots();
 
         _state = state;
         _rules = rules;
@@ -208,7 +220,9 @@ public class BoardView : MonoBehaviour
 
     void Awake()
     {
+        CaptureOriginalTransformIfNeeded();
         EnsureRuntimeRoots();
+        NormalizeRuntimeRoots();
         _defByType.Clear();
         if (_enemyIntel == null)
             _enemyIntel = new EnemyIntelService();
@@ -317,15 +331,19 @@ public class BoardView : MonoBehaviour
         var cam = Camera.main;
         if (!cam) return;
 
-        float worldW = (_state.Width) * tileSize;
-        float worldH = (_state.Height) * tileSize;
-        float cx = worldW * 0.5f - tileSize * 0.5f;
-        float cy = worldH * 0.5f - tileSize * 0.5f;
+        var lossy = transform.lossyScale;
+        float scaledTileW = tileSize * Mathf.Abs(lossy.x);
+        float scaledTileH = tileSize * Mathf.Abs(lossy.y);
+        float worldW = (_state.Width) * scaledTileW;
+        float worldH = (_state.Height) * scaledTileH;
+        var center = BoardToWorld(_state.Width / 2, _state.Height / 2);
+        center.x -= scaledTileW * 0.5f;
+        center.y -= scaledTileH * 0.5f;
 
-        cam.transform.position = new Vector3(cx, cy, -10f);
+        cam.transform.position = new Vector3(center.x, center.y, -10f);
         cam.orthographic = true;
 
-        float pad = cameraPaddingTiles * tileSize;
+        float pad = cameraPaddingTiles * Mathf.Max(scaledTileW, scaledTileH);
         float halfW = worldW * 0.25f + pad;
         float halfH = worldH * 0.25f + pad;
 
@@ -378,9 +396,11 @@ public class BoardView : MonoBehaviour
                 prefab.AddComponent<SpriteRenderer>(); // tyhjä SR, väri täytetään alla
             }
 
-            var pos = BoardToWorld(c.X, c.Y, tilesZ);
-            var go = Instantiate(prefab, pos, Quaternion.identity, TilesParent);
+            var go = Instantiate(prefab, TilesParent);
             go.name = $"Tile_{c.X}_{c.Y}";
+            go.transform.localPosition = BoardToLocal(c.X, c.Y, tilesZ);
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
 
             // 2) Aina alle nappuloiden: pakota layer & order & enabled
             if (!go.TryGetComponent<SpriteRenderer>(out var sr))
@@ -459,8 +479,10 @@ public class BoardView : MonoBehaviour
 
             go.SetActive(true);
 
-            go.transform.position = BoardToWorld(m.To.X, m.To.Y, -0.1f);
-            go.transform.SetParent(HLParent, worldPositionStays: true);
+            go.transform.SetParent(HLParent, worldPositionStays: false);
+            go.transform.localPosition = BoardToLocal(m.To.X, m.To.Y, -0.1f);
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
             _highlights.Add(go);
         }
     }
@@ -488,8 +510,7 @@ public class BoardView : MonoBehaviour
     private void SnapPieceViewToBoard(PieceView pv, int x, int y)
     {
         if (pv == null) return;
-        var p = pv.transform.position;
-        pv.transform.position = BoardToWorld(x, y, p.z);
+        pv.transform.localPosition = BoardToLocal(x, y, pv.transform.localPosition.z);
     }
 
     public bool TryDropPublic(PieceView pv, (int x, int y) from, (int x, int y) to, List<Move> cached)
@@ -581,7 +602,10 @@ public class BoardView : MonoBehaviour
             }
 
             var prefab = def.viewPrefabOverride != null ? def.viewPrefabOverride : PiecePrefab;
-            var go = Instantiate(prefab, BoardToWorld(c.X, c.Y, -1f), Quaternion.identity, PiecesParent);
+            var go = Instantiate(prefab, PiecesParent);
+            go.transform.localPosition = BoardToLocal(c.X, c.Y, -1f);
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
 
             var sr = go.GetComponent<SpriteRenderer>();
             if (sr == null) sr = go.GetComponentInChildren<SpriteRenderer>(true);
@@ -838,6 +862,72 @@ public class BoardView : MonoBehaviour
         if (overlaysRoot == null) overlaysRoot = transform.Find("Overlays") ?? Make("Overlays");
     }
 
+    void CaptureOriginalTransformIfNeeded()
+    {
+        if (_capturedOriginalTransform)
+            return;
+
+        _originalParent = transform.parent;
+        _originalLocalPosition = transform.localPosition;
+        _originalLocalRotation = transform.localRotation;
+        _originalLocalScale = transform.localScale;
+        _capturedOriginalTransform = true;
+    }
+
+    void EnsureWorldSpaceRoot()
+    {
+        CaptureOriginalTransformIfNeeded();
+
+        if (transform.parent != null)
+            transform.SetParent(null, worldPositionStays: false);
+
+        transform.position = Vector3.zero;
+        transform.rotation = Quaternion.identity;
+        transform.localScale = Vector3.one;
+    }
+
+    void RestoreOriginalTransform()
+    {
+        if (!_capturedOriginalTransform)
+            return;
+
+        transform.SetParent(_originalParent, worldPositionStays: false);
+        transform.localPosition = _originalLocalPosition;
+        transform.localRotation = _originalLocalRotation;
+        transform.localScale = _originalLocalScale;
+    }
+
+    void NormalizeRuntimeRoots()
+    {
+        if (tilesRoot != null)
+        {
+            tilesRoot.localPosition = Vector3.zero;
+            tilesRoot.localRotation = Quaternion.identity;
+            tilesRoot.localScale = Vector3.one;
+        }
+
+        if (piecesRoot != null)
+        {
+            piecesRoot.localPosition = Vector3.zero;
+            piecesRoot.localRotation = Quaternion.identity;
+            piecesRoot.localScale = Vector3.one;
+        }
+
+        if (highlightsRoot != null)
+        {
+            highlightsRoot.localPosition = Vector3.zero;
+            highlightsRoot.localRotation = Quaternion.identity;
+            highlightsRoot.localScale = Vector3.one;
+        }
+
+        if (overlaysRoot != null)
+        {
+            overlaysRoot.localPosition = Vector3.zero;
+            overlaysRoot.localRotation = Quaternion.identity;
+            overlaysRoot.localScale = Vector3.one;
+        }
+    }
+
     public void Teardown(bool destroySelfGO = true)
     {
         if (_teardownDone) return;
@@ -879,6 +969,8 @@ public class BoardView : MonoBehaviour
         ai = null;
         _rules = null;
         _state = null;
+
+        RestoreOriginalTransform();
 
         enabled = false;
         if (destroySelfGO)

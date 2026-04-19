@@ -1,4 +1,4 @@
-﻿// Assets/Scripts/Meta/Player/PlayerService.cs
+// Assets/Scripts/Meta/Player/PlayerService.cs
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -910,6 +910,77 @@ public sealed class PlayerService : MonoBehaviour
         return true;
     }
 
+    public IReadOnlyList<string> GetInventoryItemIds(int totalSlots = 16)
+    {
+        EnsureInventorySlots(totalSlots);
+        return Data.inventoryIds.ToList();
+    }
+
+    public string GetInventoryItemIdAt(int slotIndex, int totalSlots = 16)
+    {
+        EnsureInventorySlots(totalSlots);
+        if (slotIndex < 0 || slotIndex >= Data.inventoryIds.Count)
+            return string.Empty;
+
+        return Data.inventoryIds[slotIndex] ?? string.Empty;
+    }
+
+    public bool TryAddInventoryItem(string itemId, int preferredSlot = -1, int totalSlots = 16)
+    {
+        if (string.IsNullOrEmpty(itemId))
+            return false;
+
+        EnsureInventorySlots(totalSlots);
+
+        if (preferredSlot >= 0 &&
+            preferredSlot < Data.inventoryIds.Count &&
+            string.IsNullOrEmpty(Data.inventoryIds[preferredSlot]))
+        {
+            Data.inventoryIds[preferredSlot] = itemId;
+            OnChanged?.Invoke();
+            Save();
+            return true;
+        }
+
+        for (int i = 0; i < Data.inventoryIds.Count; i++)
+        {
+            if (!string.IsNullOrEmpty(Data.inventoryIds[i]))
+                continue;
+
+            Data.inventoryIds[i] = itemId;
+            OnChanged?.Invoke();
+            Save();
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool ConsumeInventoryItemAt(int slotIndex, string expectedItemId = null, int totalSlots = 16)
+    {
+        EnsureInventorySlots(totalSlots);
+        if (slotIndex < 0 || slotIndex >= Data.inventoryIds.Count)
+            return false;
+
+        var current = Data.inventoryIds[slotIndex] ?? string.Empty;
+        if (string.IsNullOrEmpty(current))
+            return false;
+
+        if (!string.IsNullOrEmpty(expectedItemId) && !string.Equals(current, expectedItemId, StringComparison.Ordinal))
+            return false;
+
+        Data.inventoryIds[slotIndex] = string.Empty;
+        OnChanged?.Invoke();
+        Save();
+        return true;
+    }
+
+    public bool HasInventorySpace(int totalSlots = 16)
+    {
+        EnsureInventorySlots(totalSlots);
+        return Data.inventoryIds.Any(string.IsNullOrEmpty);
+    }
+
     // --- Run reset (coins + tämän runin lauta) ---
     public void ResetRun()
     {
@@ -961,6 +1032,20 @@ public sealed class PlayerService : MonoBehaviour
         }
 
         PlayerInstanceSync.SyncLegacyFromInstances(Data);
+    }
+
+    private void EnsureInventorySlots(int totalSlots)
+    {
+        if (Data.inventoryIds == null)
+            Data.inventoryIds = new List<string>();
+
+        totalSlots = Mathf.Max(1, totalSlots);
+
+        while (Data.inventoryIds.Count < totalSlots)
+            Data.inventoryIds.Add(string.Empty);
+
+        if (Data.inventoryIds.Count > totalSlots)
+            Data.inventoryIds = Data.inventoryIds.Take(totalSlots).ToList();
     }
 
     private LoadoutSlotInstanceData GetOrCreateLoadoutSlot(int slotIndex)

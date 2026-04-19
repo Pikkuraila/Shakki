@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 public class ShopGridView : MonoBehaviour
 {
@@ -21,6 +22,7 @@ public class ShopGridView : MonoBehaviour
     [Header("Config")]
     [Min(1)] public int visibleSlots = 4;              // montako myyntipaikkaa näkyy
     public bool preventDuplicatesInRow = true;         // ei samaa itemiä kahdesti
+    [Min(0)] public int rerollPrice = 0;
 
     [Header("Tile skin")]
     public Sprite lightTile;
@@ -36,6 +38,8 @@ public class ShopGridView : MonoBehaviour
     private readonly List<ShopItemDefSO> _currentRoll = new(); // tämän session valinta
     private List<ShopItemDefSO> _roll = new();     // 0..3 näkyvät
     private Dictionary<int, ShopItemDefSO> _uiToItem = new(); // uiIndex -> item
+    private Button _rerollButton;
+    private TextMeshProUGUI _rerollLabel;
 
     // ===== Lifecycle =====
     private void Awake()
@@ -145,6 +149,7 @@ public class ShopGridView : MonoBehaviour
         }
 
         EnsureDragLayer();
+        EnsureRerollButton();
         _built = true;
     }
 
@@ -163,6 +168,7 @@ public class ShopGridView : MonoBehaviour
     {
         // TODO: päivitä lukitukset/hinnat jos lisäät varastosaldot jne.
         RefreshAllSkins();
+        RefreshRerollButtonState();
     }
 
     // ===== Core: build from pool =====
@@ -181,6 +187,107 @@ public class ShopGridView : MonoBehaviour
         BuildIfNeeded();
         for (int ui = 0; ui < Columns; ui++) RefreshSlot(ui);
         RefreshAllSkins();
+        RefreshRerollButtonState();
+    }
+
+    public bool TryReroll(out string reason)
+    {
+        reason = null;
+
+        if (!_depsReady)
+        {
+            reason = "deps not ready";
+            return false;
+        }
+
+        if (playerService == null)
+        {
+            reason = "player svc missing";
+            return false;
+        }
+
+        if (rerollPrice > 0 && !playerService.SpendCoins(rerollPrice))
+        {
+            reason = "not enough coins";
+            return false;
+        }
+
+        RebuildFromPool();
+        return true;
+    }
+
+    private void EnsureRerollButton()
+    {
+        if (_rerollButton != null)
+            return;
+
+        var parent = grid != null ? grid.transform.parent as RectTransform : transform as RectTransform;
+        if (parent == null)
+            return;
+
+        var buttonGO = new GameObject("Button_Reroll", typeof(RectTransform), typeof(Image), typeof(Button));
+        buttonGO.transform.SetParent(parent, false);
+
+        var rt = buttonGO.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(1f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.sizeDelta = new Vector2(116f, 34f);
+        rt.anchoredPosition = new Vector2(-8f, 8f);
+
+        var bg = buttonGO.GetComponent<Image>();
+        bg.color = new Color(0.18f, 0.22f, 0.18f, 0.96f);
+
+        _rerollButton = buttonGO.GetComponent<Button>();
+        var colors = _rerollButton.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
+        colors.pressedColor = new Color(0.86f, 0.86f, 0.86f, 1f);
+        colors.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.9f);
+        _rerollButton.colors = colors;
+        _rerollButton.onClick.AddListener(OnRerollPressed);
+
+        var labelGO = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+        labelGO.transform.SetParent(buttonGO.transform, false);
+
+        var labelRt = labelGO.GetComponent<RectTransform>();
+        labelRt.anchorMin = Vector2.zero;
+        labelRt.anchorMax = Vector2.one;
+        labelRt.offsetMin = new Vector2(6f, 4f);
+        labelRt.offsetMax = new Vector2(-6f, -4f);
+
+        _rerollLabel = labelGO.GetComponent<TextMeshProUGUI>();
+        _rerollLabel.alignment = TextAlignmentOptions.Center;
+        _rerollLabel.fontSize = 16f;
+        _rerollLabel.color = new Color(0.96f, 0.94f, 0.86f, 1f);
+        _rerollLabel.raycastTarget = false;
+    }
+
+    private void OnRerollPressed()
+    {
+        if (!TryReroll(out var reason))
+        {
+            Debug.Log($"[Shop] Reroll failed: {reason}");
+            return;
+        }
+
+        Debug.Log($"[Shop] Reroll OK price={rerollPrice}");
+    }
+
+    private void RefreshRerollButtonState()
+    {
+        if (_rerollButton == null)
+            return;
+
+        bool canAfford = playerService != null && playerService.Data != null && playerService.Data.coins >= rerollPrice;
+        _rerollButton.interactable = _depsReady && playerService != null && canAfford;
+
+        if (_rerollLabel != null)
+        {
+            _rerollLabel.text = rerollPrice > 0
+                ? $"Reroll ({rerollPrice})"
+                : "Reroll";
+        }
     }
 
 
@@ -417,8 +524,8 @@ public class ShopGridView : MonoBehaviour
         price = picked.GetPrice(pd);
         Debug.Log($"[Shop] Computed price={price} for {picked.name}");
 
-        // Turva: 0- tai negatiivinen hinta EI ole ok
-        if (price <= 0)
+        // Negatiivinen hinta ei ole ok, mutta 0 on sallittu debugiin / free rewardsiin.
+        if (price < 0)
         {
             reason = "invalid price";
             Debug.LogError($"[Shop] INVALID PRICE {price} for {picked.name} (payloadId={drag?.payloadId}). Check ShopItemDefSO.price.");
@@ -426,14 +533,17 @@ public class ShopGridView : MonoBehaviour
         }
 
         // 3) Yritä veloittaa kolikot
-        if (!playerService.SpendCoins(price))
+        if (price > 0 && !playerService.SpendCoins(price))
         {
             reason = "not enough coins";
             Debug.Log($"[Shop] SpendCoins FAILED: coinsBefore={coinsBefore}, needed={price}");
             return false;
         }
 
-        Debug.Log($"[Shop] SpendCoins OK: {coinsBefore} -> {playerService.Data.coins}");
+        if (price > 0)
+            Debug.Log($"[Shop] SpendCoins OK: {coinsBefore} -> {playerService.Data.coins}");
+        else
+            Debug.Log("[Shop] Free purchase (price=0).");
 
         // 4) Poista ostettu itemi tämän runin rollista (tilalle ei tule uutta)
         int idx = _roll.IndexOf(picked);

@@ -18,7 +18,7 @@ namespace Shakki.Core
                 var to = new Coord(from.X + dx, from.Y + dy);
                 if (!s.InBounds(to)) continue;
                 var q = s.Get(to);
-                if (q == null || q.Owner != me.Owner)
+                if (q == null || BoardPieceUtility.CanCapture(me, q))
                     yield return new Move(from, to);
             }
         }

@@ -3,17 +3,17 @@ using System.Collections.Generic;
 namespace Shakki.Core
 {
     /// <summary>
-    /// Leaper = hyppää täsmälleen annettuihin offsetteihin (dx,dy). Ei välitä välissä olevista paloista.
+    /// Leaper = hyppÃ¤Ã¤ tÃ¤smÃ¤lleen annettuihin offsetteihin (dx,dy). Ei vÃ¤litÃ¤ vÃ¤lissÃ¤ olevista paloista.
     /// Esim:
-    ///  - Dabbaba: (±2,0),(0,±2)
-    ///  - Alfil:   (±2,±2)
-    ///  - Knight:  (±1,±2),(±2,±1)
+    ///  - Dabbaba: (Â±2,0),(0,Â±2)
+    ///  - Alfil:   (Â±2,Â±2)
+    ///  - Knight:  (Â±1,Â±2),(Â±2,Â±1)
     /// </summary>
     public sealed class LeaperRule : IMoveRule
     {
         readonly (int dx, int dy)[] _offsets;
-        readonly bool _captureOnly;     // jos true: vain syövät siirrot
-        readonly bool _nonCaptureOnly;  // jos true: vain tyhjään ruutuun
+        readonly bool _captureOnly;     // jos true: vain syÃ¶vÃ¤t siirrot
+        readonly bool _nonCaptureOnly;  // jos true: vain tyhjÃ¤Ã¤n ruutuun
 
         public LeaperRule((int, int)[] offsets, bool captureOnly = false, bool nonCaptureOnly = false)
         {
@@ -33,12 +33,12 @@ namespace Shakki.Core
                 if (!s.InBounds(to)) continue;
 
                 var q = s.Get(to);
-                bool isCapture = q != null && q.Owner != me.Owner;
-                bool isBlockedByOwn = q != null && q.Owner == me.Owner;
+                bool isCapture = BoardPieceUtility.CanCapture(me, q);
+                bool isBlockedByOwn = q != null && !isCapture;
 
-                if (isBlockedByOwn) continue;                 // ei voi hypätä omaan ruutuun
-                if (_captureOnly && !isCapture) continue;     // vaaditaan syönti
-                if (_nonCaptureOnly && isCapture) continue;   // vaaditaan tyhjä ruutu
+                if (isBlockedByOwn) continue;                 // ei voi hypÃ¤tÃ¤ omaan ruutuun
+                if (_captureOnly && !isCapture) continue;     // vaaditaan syÃ¶nti
+                if (_nonCaptureOnly && isCapture) continue;   // vaaditaan tyhjÃ¤ ruutu
 
                 yield return new Move(from, to);
             }

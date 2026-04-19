@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Shakki.Core
 {
@@ -55,14 +55,14 @@ namespace Shakki.Core
             if (s.InBounds(capL))
             {
                 var q = s.Get(capL);
-                if (q != null && q.Owner != me.Owner)
+                if (BoardPieceUtility.CanCapture(me, q))
                     yield return new Move(from, capL);
             }
 
             if (s.InBounds(capR))
             {
                 var q = s.Get(capR);
-                if (q != null && q.Owner != me.Owner)
+                if (BoardPieceUtility.CanCapture(me, q))
                     yield return new Move(from, capR);
             }
 

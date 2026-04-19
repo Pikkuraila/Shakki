@@ -14,7 +14,8 @@ namespace Shakki.Core
 
         // Special mechanics
         Shapeshifter = 1 << 3,
-        test2 = 1 << 4,
-        test3 = 1 << 5,
+        Obstacle = 1 << 4,
+        test2 = 1 << 5,
+        test3 = 1 << 6,
     }
 }

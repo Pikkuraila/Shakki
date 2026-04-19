@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace Shakki.Core
 {
@@ -50,8 +50,8 @@ namespace Shakki.Core
                         continue;
                     }
 
-                    // Vastustajan nappula → vain jos ei nonCaptureOnly
-                    if (q.Owner != me.Owner && !_nonCaptureOnly)
+                    // Obstacles block the lane but cannot be captured.
+                    if (BoardPieceUtility.CanCapture(me, q) && !_nonCaptureOnly)
                         yield return new Move(from, to);
 
                     // Oma tai vihollinen blokkaa aina säteen

@@ -14,7 +14,7 @@ namespace Shakki.Core
 
         public CannonRule((int, int)[] dirs) { _dirs = dirs; }
 
-        // UUSI: parametriton ctor k‰ytt‰‰ RookDirs
+        // UUSI: parametriton ctor k√§ytt√§√§ RookDirs
         public CannonRule() : this(RookDirs) { }
 
         public IEnumerable<Move> Generate(RuleContext ctx)
@@ -28,7 +28,7 @@ namespace Shakki.Core
             {
                 int x = from.X, y = from.Y;
 
-                // 1) Normaalit liikkeet kuin tornilla, kunnes tˆrm‰t‰‰n ruutuun jossa on nappula
+                // 1) Normaalit liikkeet kuin tornilla, kunnes t√∂rm√§t√§√§n ruutuun jossa on nappula
                 while (true)
                 {
                     x += dx; y += dy;
@@ -38,13 +38,13 @@ namespace Shakki.Core
                     var q = s.Get(here);
                     if (q == null)
                     {
-                        // Tyhj‰ ruutu: cannon saa liikkua t‰h‰n (ei kaappausta)
+                        // Tyhj√§ ruutu: cannon saa liikkua t√§h√§n (ei kaappausta)
                         yield return new Move(from, here);
                         continue;
                     }
 
-                    // Osui ensimm‰iseen nappulaan = SCREEN lˆytyi
-                    // 2) Etsi seuraava nappula samassa suunnassa ó vain se voi olla kaappauskohde
+                    // Osui ensimm√§iseen nappulaan = SCREEN l√∂ytyi
+                    // 2) Etsi seuraava nappula samassa suunnassa ‚Äî vain se voi olla kaappauskohde
                     while (true)
                     {
                         x += dx; y += dy;
@@ -52,17 +52,17 @@ namespace Shakki.Core
                         if (!s.InBounds(land)) break;
 
                         var t = s.Get(land);
-                        if (t == null) continue; // saa olla monta tyhj‰‰ v‰liss‰
+                        if (t == null) continue; // saa olla monta tyhj√§√§ v√§liss√§
 
-                        // Ensimm‰inen nappula screenin j‰lkeen ratkaisee
-                        if (t.Owner != me.Owner)
+                        // Ensimm√§inen nappula screenin j√§lkeen ratkaisee
+                        if (BoardPieceUtility.CanCapture(me, t))
                             yield return new Move(from, land); // kaappaus sallittu
 
-                        // Oli se oma tai vihollinen, pys‰hdyt‰‰n joka tapauksessa
+                        // Oli se oma tai vihollinen, pys√§hdyt√§√§n joka tapauksessa
                         break;
                     }
 
-                    // Suunta k‰sitelty loppuun
+                    // Suunta k√§sitelty loppuun
                     break;
                 }
             }

@@ -5,6 +5,8 @@ using Shakki.Core;
 using System.Linq;
 using Shakki.Meta.Bestiary;
 using TMPro;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 
 public sealed class RunController : MonoBehaviour
@@ -32,9 +34,15 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private GameObject shopPanel;          // Canvas/Panel (inactive)
     [SerializeField] private LoadoutGridView loadoutView;   // 8×2
     [SerializeField] private ShopGridView shopView;         // 4×1
+    [SerializeField] private GameObject itemInventoryPanel;
+    [SerializeField] private InventoryGridView itemInventoryView;
 
     [Header("Shop Data")]
     [SerializeField] private ShopPoolSO defaultShopPool;
+
+    [Header("Usable Items")]
+    [SerializeField] private string stoneHeadItemId = "IT_StoneHead";
+    [SerializeField] private string stoneHeadObstaclePieceId = "StoneHeadObstacle";
 
     [Header("Alchemist UI (Canvas)")]
     [SerializeField] private GameObject alchemistPanel;              // Canvas/Panel (inactive)
@@ -98,6 +106,9 @@ public sealed class RunController : MonoBehaviour
     private string _debugCurrentPhase = "Boot";
     private string _debugEncounterName = "-";
     private string _debugEncounterSource = "-";
+
+    private const int ItemInventorySlots = 16;
+    private const string NeutralObstacleOwner = "neutral";
 
     
 
@@ -464,6 +475,9 @@ public sealed class RunController : MonoBehaviour
     private void Start()
     {
         BuildRules();
+        EnsureItemInventoryUi();
+        RefreshItemInventoryUi();
+        SetItemInventoryVisible(true);
         _debugCurrentPhase = "Starting";
         RefreshDebugOverlay();
 
@@ -482,6 +496,162 @@ public sealed class RunController : MonoBehaviour
     private void OnDestroy()
     {
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
+    }
+
+    private void EnsureItemInventoryUi()
+    {
+        if (itemInventoryView != null && itemInventoryPanel != null)
+            return;
+
+        if (itemInventoryPanel == null)
+            itemInventoryPanel = CreateRuntimeItemInventoryPanel();
+
+        if (itemInventoryPanel == null)
+            return;
+
+        itemInventoryView = itemInventoryPanel.GetComponent<InventoryGridView>();
+        if (itemInventoryView == null)
+            itemInventoryView = itemInventoryPanel.AddComponent<InventoryGridView>();
+
+        itemInventoryView.columns = 2;
+        itemInventoryView.rows = 8;
+        itemInventoryView.Bind(playerService != null ? playerService : PlayerService.Instance, catalog, this);
+        itemInventoryView.BuildIfNeeded();
+    }
+
+    private GameObject CreateRuntimeItemInventoryPanel()
+    {
+        var rootCanvas = ResolveUiRootCanvas();
+        if (rootCanvas == null)
+        {
+            Debug.LogWarning("[Items] Could not resolve UI canvas for runtime inventory panel.");
+            return null;
+        }
+
+        var panel = new GameObject("ItemInventoryPanel", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+        var panelRect = panel.GetComponent<RectTransform>();
+        panelRect.SetParent(rootCanvas.transform, false);
+        panelRect.anchorMin = new Vector2(1f, 0.5f);
+        panelRect.anchorMax = new Vector2(1f, 0.5f);
+        panelRect.pivot = new Vector2(1f, 0.5f);
+        panelRect.anchoredPosition = new Vector2(-10f, 0f);
+        panelRect.sizeDelta = new Vector2(108f, 168f);
+
+        var panelImage = panel.GetComponent<Image>();
+        panelImage.color = new Color(0.10f, 0.12f, 0.14f, 0.92f);
+
+        var title = new GameObject("Title", typeof(RectTransform), typeof(TextMeshProUGUI));
+        title.transform.SetParent(panel.transform, false);
+        var titleRect = title.GetComponent<RectTransform>();
+        titleRect.anchorMin = new Vector2(0f, 1f);
+        titleRect.anchorMax = new Vector2(1f, 1f);
+        titleRect.pivot = new Vector2(0.5f, 1f);
+        titleRect.anchoredPosition = new Vector2(0f, -4f);
+        titleRect.sizeDelta = new Vector2(0f, 12f);
+
+        var titleText = title.GetComponent<TextMeshProUGUI>();
+        titleText.text = "Items";
+        titleText.alignment = TextAlignmentOptions.Center;
+        titleText.fontSize = 9f;
+        titleText.color = new Color(0.95f, 0.92f, 0.84f, 1f);
+        titleText.raycastTarget = false;
+
+        var gridGo = new GameObject("Grid", typeof(RectTransform), typeof(GridLayoutGroup));
+        gridGo.transform.SetParent(panel.transform, false);
+        var gridRect = gridGo.GetComponent<RectTransform>();
+        gridRect.anchorMin = new Vector2(0f, 0f);
+        gridRect.anchorMax = new Vector2(1f, 1f);
+        gridRect.offsetMin = new Vector2(6f, 6f);
+        gridRect.offsetMax = new Vector2(-6f, -16f);
+
+        var inventory = panel.AddComponent<InventoryGridView>();
+        inventory.grid = gridGo.GetComponent<GridLayoutGroup>();
+        inventory.columns = 2;
+        inventory.rows = 8;
+        inventory.cellSize = new Vector2(22f, 22f);
+        inventory.spacing = new Vector2(2f, 2f);
+
+        return panel;
+    }
+
+    private Canvas ResolveUiRootCanvas()
+    {
+        if (shopPanel != null)
+            return shopPanel.GetComponentInParent<Canvas>(true)?.rootCanvas;
+
+        if (loadoutView != null)
+            return loadoutView.GetComponentInParent<Canvas>(true)?.rootCanvas;
+
+        if (itemInventoryPanel != null)
+            return itemInventoryPanel.GetComponentInParent<Canvas>(true)?.rootCanvas;
+
+        return FindObjectOfType<Canvas>(true)?.rootCanvas;
+    }
+
+    private void RefreshItemInventoryUi()
+    {
+        EnsureItemInventoryUi();
+        itemInventoryView?.Bind(playerService != null ? playerService : PlayerService.Instance, catalog, this);
+        itemInventoryView?.RefreshAll();
+    }
+
+    private void SetItemInventoryVisible(bool visible)
+    {
+        EnsureItemInventoryUi();
+        if (itemInventoryPanel != null)
+        {
+            if (visible)
+                itemInventoryPanel.transform.SetAsLastSibling();
+
+            itemInventoryPanel.SetActive(visible);
+        }
+
+        if (visible)
+            RefreshItemInventoryUi();
+    }
+
+    public bool TryHandleBoardItemDrop(UIDraggablePiece drag, PointerEventData eventData)
+    {
+        if (drag == null || eventData == null)
+            return false;
+
+        if (drag.payloadKind != DragPayloadKind.Item || drag.originKind != SlotKind.Inventory)
+            return false;
+
+        if (!string.Equals(drag.payloadId, stoneHeadItemId, System.StringComparison.Ordinal))
+            return false;
+
+        if (_state == null || boardView == null || !boardView.enabled || _state.IsGameOver)
+            return false;
+
+        if (_state.CurrentPlayer != "white")
+            return false;
+
+        var world = Camera.main != null
+            ? Camera.main.ScreenToWorldPoint(new Vector3(eventData.position.x, eventData.position.y, Mathf.Abs(Camera.main.transform.position.z)))
+            : Vector3.zero;
+        world.z = 0f;
+
+        var target = boardView.WorldToBoardPublic(world);
+        var coord = new Coord(target.x, target.y);
+        if (!_state.InBounds(coord))
+            return false;
+
+        if (_state.Get(coord) != null)
+            return false;
+
+        if (playerService == null || !playerService.ConsumeInventoryItemAt(drag.originIndex, drag.payloadId, ItemInventorySlots))
+            return false;
+
+        var obstacle = new Piece(NeutralObstacleOwner, stoneHeadObstaclePieceId, System.Array.Empty<IMoveRule>(), PieceTag.Obstacle);
+        _state.Set(coord, obstacle);
+
+        if (boardView != null)
+            boardView.RefreshFromState();
+
+        RefreshItemInventoryUi();
+        Debug.Log($"[Items] Placed Stone Head obstacle at {coord.X},{coord.Y}");
+        return true;
     }
 
 
@@ -606,6 +776,7 @@ public sealed class RunController : MonoBehaviour
     private void EnterMacroPhase()
     {
         UIDraggablePiece.s_IsDraggingAny = false;
+        SetItemInventoryVisible(true);
 
         if (macroView == null || macroMap == null)
         {
@@ -1039,6 +1210,8 @@ public sealed class RunController : MonoBehaviour
 
     private void TeardownPrevious()
     {
+        SetItemInventoryVisible(true);
+
         // Bestiary: detach from old GameState
         if (_bestiaryHooks != null)
             _bestiaryHooks.Detach();
@@ -1227,7 +1400,7 @@ public sealed class RunController : MonoBehaviour
 
     private void OnGameEnded(GameEndInfo info)
     {
-        
+        SetItemInventoryVisible(true);
 
         bool playerWon = info.WinnerColor == "white";
 
@@ -1273,6 +1446,7 @@ public sealed class RunController : MonoBehaviour
     private void OpenShop()
     {
         Debug.Log($"[OpenShop] Open shop with macroShopTier={_pendingShopTier}");
+        SetItemInventoryVisible(true);
 
         // 0) Estä pelilaudan input
         if (boardView != null) boardView.enabled = false;
@@ -1340,6 +1514,7 @@ public sealed class RunController : MonoBehaviour
 
         // 2) Sulje shop
         if (shopPanel != null) shopPanel.SetActive(false);
+        SetItemInventoryVisible(true);
         dragController?.CancelActiveDragImmediately();
         UIDraggablePiece.s_IsDraggingAny = false;
 
@@ -1353,6 +1528,7 @@ public sealed class RunController : MonoBehaviour
     private void OpenAlchemist()
     {
         Debug.Log("[OpenAlchemist] Open alchemist encounter");
+        SetItemInventoryVisible(true);
 
         // 0) Estä pelilaudan input (varmuus)
         if (boardView != null) boardView.enabled = false;
@@ -1806,10 +1982,13 @@ public sealed class RunController : MonoBehaviour
 
             boardView.CanPlayerMoveEnemyPiece = (pv) => false;
             boardView.enabled = true;
+            SetItemInventoryVisible(true);
+            RefreshItemInventoryUi();
         }
         else
         {
             Debug.LogError("[RunController] BoardView puuttuu scenestä – ei voida piirtää lautaa.");
+            SetItemInventoryVisible(true);
         }
 
         // 5) Game over -kuuntelu

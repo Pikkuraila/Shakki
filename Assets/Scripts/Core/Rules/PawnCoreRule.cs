@@ -2,10 +2,10 @@ using System.Collections.Generic;
 
 namespace Shakki.Core
 {
-    // VAIN perusliike ja diagokaappaus ñ ei tuplahyppy‰, ei en passantia
+    // VAIN perusliike ja diagokaappaus ‚Äì ei tuplahyppy√§, ei en passantia
     public sealed class PawnCoreRule : IMoveRule
     {
-        // J‰tet‰‰n vanha ctor yhteensopivuussyist‰, mutta arvoa ei k‰ytet‰
+        // J√§tet√§√§n vanha ctor yhteensopivuussyist√§, mutta arvoa ei k√§ytet√§
         public PawnCoreRule(int dir) { }
         public PawnCoreRule() { }
 
@@ -30,13 +30,13 @@ namespace Shakki.Core
             if (s.InBounds(capR))
             {
                 var q = s.Get(capR);
-                if (q != null && q.Owner != me.Owner)
+                if (BoardPieceUtility.CanCapture(me, q))
                     yield return new Move(from, capR);
             }
             if (s.InBounds(capL))
             {
                 var q = s.Get(capL);
-                if (q != null && q.Owner != me.Owner)
+                if (BoardPieceUtility.CanCapture(me, q))
                     yield return new Move(from, capL);
             }
         }
