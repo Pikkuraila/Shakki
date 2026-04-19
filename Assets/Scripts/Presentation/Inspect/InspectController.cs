@@ -211,11 +211,7 @@ namespace Shakki.Presentation.Inspect
             if (!isEnemy)
                 return;
 
-            var subject = new EnemyIntelSubject(
-                pv.TypeName,
-                def != null ? def.GetDisplayName() : pv.TypeName,
-                null
-            );
+            var subject = new EnemyIntelSubject(pv.TypeName);
 
             var ctx = new IntelContext
             {
