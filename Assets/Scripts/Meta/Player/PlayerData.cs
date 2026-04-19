@@ -5,17 +5,26 @@ using System.Collections.Generic;
 [Serializable]
 public sealed class PlayerData
 {
-    public int version = 1;
+    public int version = 5;
     public int coins = 0;
 
     public List<string> ownedPieceIds = new();
     public List<UpgradeInstance> upgrades = new();
 
-    // META (johdettu/kompressoitu): “montako kutakin”
+    // Legacy injury model. Kept for compatibility while the runtime migrates
+    // toward persistent piece instances.
+    public List<InjuredPieceStack> injuredPieces = new List<InjuredPieceStack>();
+
+    // Legacy aggregate roster view: “montako kutakin”
     public List<LoadoutEntry> loadout = new();
 
-    // UI/TOTUUS: 16 paikkaa, tyhjä = ""
+    // Legacy UI slot view: 16 paikkaa, tyhjä = ""
     public List<string> loadoutSlots = new();   // pituus 16
+
+    // New persistent piece identity model.
+    public int nextPieceInstanceNumber = 1;
+    public List<PieceInstanceData> pieceInstances = new();
+    public List<LoadoutSlotInstanceData> loadoutSlotInstances = new();
 
     public List<PowerupStack> powerups = new();
 
@@ -44,4 +53,11 @@ public sealed class NpcState
     public string npcId;
     public int alignment;   // esim -100..100
     public int timesMet;
+}
+
+[Serializable]
+public class InjuredPieceStack
+{
+    public string pieceId;
+    public int count;
 }

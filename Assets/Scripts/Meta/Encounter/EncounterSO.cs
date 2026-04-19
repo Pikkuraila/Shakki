@@ -1,4 +1,4 @@
-using System;
+Ôªøusing System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -13,10 +13,10 @@ public sealed class EncounterSO : ScriptableObject
     [Min(1)] public int minRecommendedTier = 1;
     [Min(1)] public int maxRecommendedTier = 999;
 
-    [Tooltip("Lis‰paino kun t‰m‰ encounter kilpailee muiden saman tierin encounterien kanssa. Voi olla negatiivinen.")]
+    [Tooltip("Lisapaino kun tama encounter kilpailee muiden saman tierin encounterien kanssa. Voi olla negatiivinen.")]
     [Range(-10, 10)] public int relativeWeightBias = 0;
 
-    [Tooltip("Jos true, t‰t‰ encounteria saa k‰ytt‰‰ boss-poolissa / bossimaisena presetin‰.")]
+    [Tooltip("Jos true, tata encounteria saa kayttaa boss-poolissa / bossimaisena presetina.")]
     public bool allowAsBoss = false;
 
     [Serializable]
@@ -24,6 +24,7 @@ public sealed class EncounterSO : ScriptableObject
     {
         public string owner;   // "white" tai "black"
         public string pieceId; // esim "King", "Queen", "Rook"
+        public string pieceInstanceId; // pysyva instanssi-id pelaajan nappuloille
         public int x;          // ABSOLUUTTINEN X
         public int y;          // ABSOLUUTTINEN Y
     }

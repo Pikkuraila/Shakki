@@ -33,6 +33,8 @@ public sealed class AlchemistEncounterView : MonoBehaviour
     private int _srcIndexB = -1;
     private string _pieceA = "";
     private string _pieceB = "";
+    private string _instanceIdA = "";
+    private string _instanceIdB = "";
 
     private bool _outputReady;
 
@@ -48,6 +50,8 @@ public sealed class AlchemistEncounterView : MonoBehaviour
     {
         loadoutView = loadout;
         catalog = cat;
+        _loadout = loadout;
+        _catalog = cat;
         baseAmalgamDef = amalgamDef != null ? amalgamDef : baseAmalgamDef;
         _runtimeRegistry = runtimeRegistry;
 
@@ -140,6 +144,12 @@ public sealed class AlchemistEncounterView : MonoBehaviour
     {
         inputA = "";
         inputB = "";
+        _pieceA = "";
+        _pieceB = "";
+        _instanceIdA = "";
+        _instanceIdB = "";
+        _srcIndexA = -1;
+        _srcIndexB = -1;
         _completedThisEncounter = false;
 
         ClearChildren(inputSlotA);
@@ -186,29 +196,40 @@ public sealed class AlchemistEncounterView : MonoBehaviour
         int srcUi = drag.originIndex;
         int srcData = loadoutView.UiToDataIndex(srcUi);
 
-        var pd = loadoutView.playerService.Data;
-        if (pd?.loadoutSlots == null) return;
-        if (srcData < 0 || srcData >= pd.loadoutSlots.Count) return;
+        var player = loadoutView.playerService != null ? loadoutView.playerService : PlayerService.Instance;
+        if (player == null) return;
 
-        var id = pd.loadoutSlots[srcData];
-        Debug.Log($"[Alchemist] HandleDropToInput slotIdx={slot.index} srcUi={srcUi} srcData={srcData} id={id} payloadId={drag.payloadId}");
+        var previewInstance = player.GetLoadoutInstanceAtSlot(srcData);
+        var previewId = PlayerInstanceSync.GetLegacyPieceId(previewInstance);
+        if (previewInstance == null || string.IsNullOrEmpty(previewId)) return;
 
-        if (string.IsNullOrEmpty(id)) return;
-
-        // ✅ varmistus myös datasta
-        if (!IsLivingId(id))
+        if (!IsLivingId(previewId))
         {
-            Debug.Log($"[Alchemist] Reject input drop (non-living by data id): {id}");
+            Debug.Log($"[Alchemist] Reject input drop (non-living by data id): {previewId}");
             return;
         }
 
-        // aseta input-state
-        if (slot.index == 0) inputA = id;
-        else inputB = id;
+        var instance = player.TakeLoadoutPieceInstanceAtSlot(srcData);
+        var id = PlayerInstanceSync.GetLegacyPieceId(instance);
+        Debug.Log($"[Alchemist] HandleDropToInput slotIdx={slot.index} srcUi={srcUi} srcData={srcData} id={id} payloadId={drag.payloadId} instanceId={instance?.instanceId}");
 
-        // tyhjennä lähde loadoutista
-        pd.loadoutSlots[srcData] = "";
-        loadoutView.playerService.Save();
+        if (instance == null || string.IsNullOrEmpty(id)) return;
+
+        // aseta input-state
+        if (slot.index == 0)
+        {
+            inputA = id;
+            _pieceA = id;
+            _instanceIdA = instance.instanceId;
+            _srcIndexA = srcData;
+        }
+        else
+        {
+            inputB = id;
+            _pieceB = id;
+            _instanceIdB = instance.instanceId;
+            _srcIndexB = srcData;
+        }
 
         // piirrä inputit ja yritä fusion
         RedrawInputs();
@@ -234,34 +255,32 @@ public sealed class AlchemistEncounterView : MonoBehaviour
     }
 
     // LoadoutGridView kutsuu tätä, kun output-amalgam tiputetaan loadout-slotille
-    public void ConsumeOutputToLoadout(int targetLoadoutIndex, UIDraggablePiece drag)
+    public bool ConsumeOutputToLoadout(int targetLoadoutIndex, UIDraggablePiece drag)
     {
-        if (_completedThisEncounter) return;
-        if (loadoutView == null) return;
-        if (drag == null) return;
+        if (_completedThisEncounter) return false;
+        if (loadoutView == null) return false;
+        if (drag == null) return false;
 
-        var pd = loadoutView.playerService.Data;
-        if (pd?.loadoutSlots == null) return;
-        if (targetLoadoutIndex < 0 || targetLoadoutIndex >= pd.loadoutSlots.Count) return;
-
-        // vain tyhjään slottiin
-        if (!string.IsNullOrEmpty(pd.loadoutSlots[targetLoadoutIndex])) return;
-
-        // 👇 EI katsota outputSlot.childCountia
-        pd.loadoutSlots[targetLoadoutIndex] = drag.payloadId; 
-
-        loadoutView.playerService.Save();
+        var player = loadoutView.playerService != null ? loadoutView.playerService : PlayerService.Instance;
+        if (player == null) return false;
+        if (player.GetLoadoutInstanceAtSlot(targetLoadoutIndex) != null) return false;
+        if (!player.TryAssignNewPieceToLoadoutSlot(targetLoadoutIndex, drag.payloadId)) return false;
 
         _completedThisEncounter = true;
 
         // siivoa UI
         inputA = "";
         inputB = "";
+        _pieceA = "";
+        _pieceB = "";
+        _instanceIdA = "";
+        _instanceIdB = "";
         ClearChildren(inputSlotA);
         ClearChildren(inputSlotB);
         ClearChildren(outputSlot);
 
         loadoutView.RefreshAll();
+        return true;
     }
 
 
@@ -510,74 +529,14 @@ public sealed class AlchemistEncounterView : MonoBehaviour
 
         switch (slot)
         {
-            case AlchemistSlotKind.InputA: AcceptIntoInputA(drag); break;
-            case AlchemistSlotKind.InputB: AcceptIntoInputB(drag); break;
+            case AlchemistSlotKind.InputA:
+                HandleDropToInput(inputSlotA != null ? inputSlotA.GetComponent<DropSlot>() : null, drag);
+                break;
+            case AlchemistSlotKind.InputB:
+                HandleDropToInput(inputSlotB != null ? inputSlotB.GetComponent<DropSlot>() : null, drag);
+                break;
             default: break;
         }
-    }
-
-    void AcceptIntoInputA(UIDraggablePiece drag)
-    {
-        AcceptIntoInput(ref _srcIndexA, ref _pieceA, inputAAnchor, drag);
-    }
-
-    void AcceptIntoInputB(UIDraggablePiece drag)
-    {
-        AcceptIntoInput(ref _srcIndexB, ref _pieceB, inputBAnchor, drag);
-    }
-
-    void AcceptIntoInput(ref int srcIndex, ref string pieceId, Transform anchor, UIDraggablePiece drag)
-    {
-        if (anchor == null) { Debug.LogError("[Alchemist] anchor missing"); return; }
-
-        // jos slotissa jo jotain → älä vielä tee mitään (myöhemmin voidaan tukea swap/return)
-        if (!string.IsNullOrEmpty(pieceId)) return;
-
-        int from = drag.originIndex;
-        var slots = PlayerService.Instance.Data.loadoutSlots;
-        if (slots == null || from < 0 || from >= slots.Count) return;
-
-        string id = slots[from];
-        if (string.IsNullOrEmpty(id)) return;
-
-        // 1) tyhjennä loadout-data (tää on se “tärkein”)
-        slots[from] = "";
-        PlayerService.Instance.Save();
-
-        // 2) tallenna alchemist state
-        srcIndex = from;
-        pieceId = id;
-
-        // 3) piirrä inputiin ikoni (ei draggable)
-        DrawStaticIcon(anchor, id);
-
-        // 4) refreshaa loadout että se oikeasti häviää ruudukosta
-        _loadout.RefreshAll();
-
-        // 5) kuluta drag UI -kopio
-        drag.MarkConsumed(-1);
-    }
-
-    void DrawStaticIcon(Transform anchor, string pieceId)
-    {
-        // tyhjennä anchor
-        for (int i = anchor.childCount - 1; i >= 0; i--)
-            Destroy(anchor.GetChild(i).gameObject);
-
-        var go = new GameObject("Icon", typeof(RectTransform), typeof(UnityEngine.UI.Image));
-        go.transform.SetParent(anchor, false);
-
-        var rt = (RectTransform)go.transform;
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-
-        var img = go.GetComponent<UnityEngine.UI.Image>();
-        var def = _catalog.GetPieceById(pieceId);
-        img.sprite = def != null ? def.whiteSprite : null;
-        img.preserveAspect = true;
-        img.enabled = (img.sprite != null);
     }
     
     static string GetPath(Transform t)

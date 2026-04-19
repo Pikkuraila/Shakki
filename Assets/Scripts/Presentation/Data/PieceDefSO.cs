@@ -38,7 +38,7 @@ public class PieceDefSO : ScriptableObject
     public Sprite portraitSprite;
 
     // --- Build helpers ---
-    public Piece Build(string owner)
+    public Piece Build(string owner, string instanceId = null)
     {
         var built = rules?
             .Where(r => r != null)
@@ -49,7 +49,7 @@ public class PieceDefSO : ScriptableObject
         // ✅ PieceTag = mekaniikka/ability (EnPassant tms). EI identity.
         var computed = GetComputedTags();
 
-        return new Piece(owner, typeName, built, computed);
+        return new Piece(owner, typeName, built, computed, instanceId);
     }
 
     public Sprite GetSpriteFor(string owner)

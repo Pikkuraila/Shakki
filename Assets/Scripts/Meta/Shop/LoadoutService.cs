@@ -56,24 +56,7 @@ public sealed class LoadoutService
 
     private List<string> Expand(int slots, string implicitKingId)
     {
-        var flat = new List<string>(slots);
-
-        // Pakkaa PlayerData.loadout -> flat
-        foreach (var e in _player.Data.loadout)
-        {
-            if (string.IsNullOrEmpty(e.pieceId) || e.count <= 0) continue;
-            for (int i = 0; i < e.count; i++) flat.Add(e.pieceId);
-        }
-
-        // Varmista kuningas tarvittaessa
-        if (!string.IsNullOrEmpty(implicitKingId) && !flat.Contains(implicitKingId))
-            flat.Add(implicitKingId);
-
-        // Leikkaus/täyttö slottimäärään
-        if (flat.Count > slots) flat = flat.Take(slots).ToList();
-        while (flat.Count < slots) flat.Add(string.Empty);
-
-        return flat;
+        return _player.GetLoadoutSlotPieceIds(slots, implicitKingId).ToList();
     }
 
     // SHIM: UI odottaa näitä nimiä
@@ -129,9 +112,15 @@ public sealed class LoadoutService
 
     public bool ApplyPowerupToSlot(int slotIndex, string powerupId)
     {
-        var slots = _player.Data.loadoutSlots;
-        if (slots == null || slotIndex < 0 || slotIndex >= slots.Count) return false;
-        if (string.IsNullOrEmpty(slots[slotIndex])) return false; // tyhjässä ei ole nappulaa
+        int slotCount =
+            _player.Data?.loadoutSlotInstances != null && _player.Data.loadoutSlotInstances.Count > 0
+                ? _player.Data.loadoutSlotInstances.Count
+                : (_player.Data?.loadoutSlots != null && _player.Data.loadoutSlots.Count > 0
+                    ? _player.Data.loadoutSlots.Count
+                    : PlayerInstanceSync.DefaultLoadoutSlotCount);
+
+        if (slotIndex < 0 || slotIndex >= slotCount) return false;
+        if (string.IsNullOrEmpty(_player.GetLoadoutPieceIdAtSlot(slotIndex, slotCount))) return false; // tyhjässä ei ole nappulaa
 
         var def = _catalog.GetPowerupById(powerupId); // toteutetaan alla
         if (def == null) return false;

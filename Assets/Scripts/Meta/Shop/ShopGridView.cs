@@ -313,18 +313,38 @@ public class ShopGridView : MonoBehaviour
         }
 
         var svcUI = drag.loadoutView;
-        var lsvc = svcUI.GetType()
-                        .GetField("_loadout", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                        ?.GetValue(svcUI) as LoadoutService;
-
-        if (lsvc == null)
+        var player = svcUI.playerService != null ? svcUI.playerService : PlayerService.Instance;
+        if (player == null)
         {
-            Debug.LogWarning("[ShopGrid] HandleDropToShop: LoadoutService not found via reflection.");
+            Debug.LogWarning("[ShopGrid] HandleDropToShop: PlayerService missing.");
             return;
         }
 
-        lsvc.Refund(drag.typeName, ratio: 1f);
-        lsvc.SetAt(drag.originIndex, string.Empty);
+        int originDataIndex = svcUI.UiToDataIndex(drag.originIndex);
+        string pieceId = !string.IsNullOrEmpty(drag.payloadId) ? drag.payloadId : drag.typeName;
+        if (string.IsNullOrEmpty(pieceId))
+        {
+            Debug.LogWarning("[ShopGrid] HandleDropToShop: missing payload id.");
+            return;
+        }
+
+        var loadoutService = svcUI.GetType()
+            .GetField("_loadout", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.GetValue(svcUI) as LoadoutService;
+
+        if (loadoutService != null)
+        {
+            int price = loadoutService.GetPrice(pieceId);
+            if (price > 0)
+                player.AddCoins(price);
+        }
+
+        if (!player.ClearLoadoutSlot(originDataIndex))
+        {
+            Debug.LogWarning($"[ShopGrid] HandleDropToShop: failed to clear loadout slot {originDataIndex}.");
+            return;
+        }
+
         svcUI.RefreshAll();
         RefreshAll();
         drag.MarkConsumed(-1);

@@ -16,7 +16,13 @@ namespace Shakki.Core
         public List<Move> MoveHistory { get; } = new();
 
         public event Action<Coord, Piece>? OnCaptured;
+        public event Action<Coord, Piece, Coord, Piece>? OnPieceCaptured;
+        // victimPos, victim, attackerFrom, attacker
+
         public event Action<string>? OnTurnChanged;
+
+        public event Action<Coord, Coord, Piece>? OnPieceMoved;
+        // from, to, movedPiece
 
         public int Width => Board.Geometry.Width;
         public int Height => Board.Geometry.Height;
@@ -90,7 +96,10 @@ namespace Shakki.Core
             // Capture (kohderuudussa vihollinen)
             var target = Get(m.To);
             if (target != null && target.Owner != piece.Owner)
+            {
                 OnCaptured?.Invoke(m.To, target);
+                OnPieceCaptured?.Invoke(m.To, target, m.From, piece);
+            }
 
             // En passant (ennallaan)
             if (piece.TypeName == "Pawn" && target == null && LastMove.HasValue)
@@ -110,6 +119,7 @@ namespace Shakki.Core
                     {
                         Set(last.To, null);
                         OnCaptured?.Invoke(last.To, movedPawn);
+                        OnPieceCaptured?.Invoke(last.To, movedPawn, m.From, piece);
                     }
                 }
             }
@@ -150,6 +160,7 @@ namespace Shakki.Core
             Set(m.To, piece);
             Set(m.From, null);
             piece.HasMoved = true;
+            OnPieceMoved?.Invoke(m.From, m.To, piece);
 
             // Päivitykset (TÄRKEÄ: kirjaa siirto ennen mahdollisen game overin triggeriä)
             LastMove = m;

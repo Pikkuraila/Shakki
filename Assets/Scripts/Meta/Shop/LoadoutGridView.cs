@@ -227,15 +227,33 @@ public class LoadoutGridView : MonoBehaviour
             return;
         }
 
-        if (PD.loadoutSlots == null || PD.loadoutSlots.Count != count)
+        bool hasAuthoritativeInstanceModel =
+            PD.version >= PlayerInstanceSync.CurrentDataVersion &&
+            PD.pieceInstances != null &&
+            PD.pieceInstances.Count > 0 &&
+            PD.loadoutSlotInstances != null &&
+            PD.loadoutSlotInstances.Count == count;
+
+        if (hasAuthoritativeInstanceModel)
         {
-            PD.loadoutSlots = LoadoutModel.Expand(PD.loadout ?? new(), count, "");
-            PS.Save();
-            Debug.Log("[LoadoutGridView] Expanded slots from meta.");
+            PlayerInstanceSync.EnsureInitialized(PD, count);
+            PlayerInstanceSync.SyncLegacyFromInstances(PD, count);
+        }
+        else
+        {
+            PlayerInstanceSync.SyncInstancesFromLegacy(PD, count);
         }
 
-        string S(string x) => string.IsNullOrEmpty(x) ? "-" : x;
-        Debug.Log($"[LoadoutGridView] Data slots[{PD.loadoutSlots.Count}] = [{string.Join(",", PD.loadoutSlots.Select(S))}]");
+        string S(int index)
+        {
+            var instance = GetInstanceAt(index);
+            var pieceId = PlayerInstanceSync.GetLegacyPieceId(instance);
+            return string.IsNullOrEmpty(pieceId)
+                ? "-"
+                : $"{pieceId}#{instance?.instanceId ?? "missing"}";
+        }
+
+        Debug.Log($"[LoadoutGridView] Instance slots[{count}] = [{string.Join(",", Enumerable.Range(0, count).Select(S))}]");
     }
 
     public void RefreshAll()
@@ -272,6 +290,7 @@ public class LoadoutGridView : MonoBehaviour
         if (_suppressDataOnce.Contains(dataIndex))
             return;
 
+        var instance = GetInstanceAt(dataIndex);
         string type = GetTypeAt(dataIndex);
 
         // Pidä DropSlot ajan tasalla AINA
@@ -280,28 +299,17 @@ public class LoadoutGridView : MonoBehaviour
         drop.index = dataIndex;
         drop.loadoutView = this;
 
-        if (UIDraggablePiece.s_IsDraggingAny)
-        {
-            if (!string.IsNullOrEmpty(type))
-            {
-                bool hasIcon = cell.transform.childCount > 0 &&
-                               cell.GetComponentInChildren<Image>(true) != null;
-                if (!hasIcon)
-                    CreateIconIntoCell(cell, type, dataIndex, uiIndex);
-            }
-            return;
-        }
-
         for (int i = cell.transform.childCount - 1; i >= 0; i--)
             Destroy(cell.transform.GetChild(i).gameObject);
 
         if (string.IsNullOrEmpty(type))
             return;
 
-        CreateIconIntoCell(cell, type, dataIndex, uiIndex);
+        bool isWounded = instance != null && PlayerInstanceSync.HasStatus(instance, PlayerInstanceSync.WoundedStatusId);
+        CreateIconIntoCell(cell, type, instance?.instanceId, isWounded, dataIndex, uiIndex);
     }
 
-    void CreateIconIntoCell(GameObject cell, string type, int dataIndex, int uiIndex)
+    void CreateIconIntoCell(GameObject cell, string type, string instanceId, bool isWounded, int dataIndex, int uiIndex)
     {
         GameObject iconGO = new GameObject("Icon", typeof(RectTransform));
         iconGO.transform.SetParent(cell.transform, false);
@@ -348,6 +356,7 @@ public class LoadoutGridView : MonoBehaviour
         var drag = iconGO.GetComponent<UIDraggablePiece>() ?? iconGO.AddComponent<UIDraggablePiece>();
 
         drag.payloadId = type;
+        drag.pieceInstanceId = instanceId;
         drag.typeName = type;
         drag.payloadKind = DragPayloadKind.Piece;
 
@@ -358,7 +367,35 @@ public class LoadoutGridView : MonoBehaviour
         drag.dragLayer = this.dragLayer;
         drag.useDragLayer = (this.dragLayer != null);
 
+        if (isWounded)
+            CreateWoundedBadgeUI(iconGO.transform);
+
         iconGO.name = $"Icon_{type}_ui{uiIndex}_data{dataIndex}";
+    }
+
+    void CreateWoundedBadgeUI(Transform parent)
+    {
+        var badgeGO = new GameObject("WoundedBadge", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(Outline));
+        badgeGO.transform.SetParent(parent, false);
+
+        var badgeRT = (RectTransform)badgeGO.transform;
+        badgeRT.anchorMin = new Vector2(1f, 1f);
+        badgeRT.anchorMax = new Vector2(1f, 1f);
+        badgeRT.pivot = new Vector2(1f, 1f);
+        badgeRT.anchoredPosition = new Vector2(-5f, -2f);
+        badgeRT.sizeDelta = new Vector2(22f, 22f);
+
+        var badgeText = badgeGO.GetComponent<TextMeshProUGUI>();
+        badgeText.text = "!";
+        badgeText.fontSize = 22f;
+        badgeText.fontStyle = FontStyles.Bold;
+        badgeText.alignment = TextAlignmentOptions.Center;
+        badgeText.color = new Color(1f, 0.45f, 0.1f, 1f);
+        badgeText.raycastTarget = false;
+
+        var outline = badgeGO.GetComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        outline.effectDistance = new Vector2(1.2f, -1.2f);
     }
 
     static void StretchRectToParent(RectTransform rt)
@@ -370,21 +407,25 @@ public class LoadoutGridView : MonoBehaviour
     }
 
     // --- Data-luku/kirjoitus ---
+    PieceInstanceData GetInstanceAt(int dataIndex)
+    {
+        if (PD?.loadoutSlotInstances == null)
+            return null;
+
+        var slot = PD.loadoutSlotInstances.Find(x => x != null && x.slotIndex == dataIndex);
+        return slot != null ? PlayerInstanceSync.FindAliveInstance(PD, slot.pieceInstanceId) : null;
+    }
+
     string GetTypeAt(int dataIndex)
     {
+        var instance = GetInstanceAt(dataIndex);
+        if (instance != null)
+            return PlayerInstanceSync.GetLegacyPieceId(instance);
+
         if (PD == null || PD.loadoutSlots == null) return "";
         var slots = PD.loadoutSlots;
         if (dataIndex < 0 || dataIndex >= slots.Count) return "";
         return slots[dataIndex] ?? "";
-    }
-
-    void SetTypeAt(int dataIndex, string pieceId)
-    {
-        if (PD == null || PD.loadoutSlots == null) return;
-        var slots = PD.loadoutSlots;
-        if (dataIndex < 0 || dataIndex >= slots.Count) return;
-        slots[dataIndex] = string.IsNullOrEmpty(pieceId) ? "" : pieceId;
-        PS.Save();
     }
 
     public void HandleDropToLoadout(DropSlot target, UIDraggablePiece drag)
@@ -401,7 +442,8 @@ public class LoadoutGridView : MonoBehaviour
             if (ui >= 0) targetDataIndex = UiToDataIndex(ui);
         }
 
-        if (targetDataIndex < 0 || targetDataIndex >= PD.loadoutSlots.Count)
+        int slotCount = PD.loadoutSlotInstances?.Count ?? PD.loadoutSlots?.Count ?? 0;
+        if (targetDataIndex < 0 || targetDataIndex >= slotCount)
         {
             Debug.LogWarning($"[LoadoutDrop] Invalid target index={target.index} (resolved={targetDataIndex}) targetGO={target.name}");
             return;
@@ -427,11 +469,10 @@ public class LoadoutGridView : MonoBehaviour
                 return;
             }
 
-            // FIX: käytä normalisoitua targetDataIndex
-            SuppressDataIndexOnce(targetDataIndex);
+            if (!drag.alchemistView.ConsumeOutputToLoadout(targetDataIndex, drag))
+                return;
 
-            drag.alchemistView.ConsumeOutputToLoadout(targetDataIndex, drag);
-
+            RefreshAll();
             StartCoroutine(CoRefreshAfterDrag());
             drag.MarkConsumed(targetDataIndex);
             return;
@@ -461,9 +502,13 @@ public class LoadoutGridView : MonoBehaviour
                 return;
             }
 
-            SuppressDataIndexOnce(targetDataIndex);
-            SetTypeAt(targetDataIndex, drag.payloadId);
+            if (!PS.TryAssignNewPieceToLoadoutSlot(targetDataIndex, drag.payloadId))
+            {
+                Debug.LogWarning($"[LoadoutDrop] Failed to create instance for purchased piece '{drag.payloadId}' into slot {targetDataIndex}.");
+                return;
+            }
 
+            RefreshAll();
             StartCoroutine(CoRefreshAfterDrag());
             drag.MarkConsumed(targetDataIndex);
             return;
@@ -499,17 +544,17 @@ public class LoadoutGridView : MonoBehaviour
         if (allowLoadoutSwap && drag.originKind == SlotKind.Loadout)
         {
             int originDataIndex = UiToDataIndex(drag.originIndex);
-            if (originDataIndex < 0 || originDataIndex >= PD.loadoutSlots.Count)
+            if (originDataIndex < 0 || originDataIndex >= slotCount)
                 return;
 
             if (originDataIndex == targetDataIndex) return;
 
             SuppressDataIndexOnce(originDataIndex);
-
-            var a = GetTypeAt(originDataIndex);
-            var b = GetTypeAt(targetDataIndex);
-            SetTypeAt(originDataIndex, b);
-            SetTypeAt(targetDataIndex, a);
+            if (!PS.SwapLoadoutInstances(originDataIndex, targetDataIndex))
+            {
+                _suppressDataOnce.Remove(originDataIndex);
+                return;
+            }
 
             StartCoroutine(CoRefreshAfterDrag());
             drag.MarkConsumed(targetDataIndex);

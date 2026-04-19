@@ -163,6 +163,10 @@ public class BoardView : MonoBehaviour
 
     public void Init(GameState state, IRulesResolver rules, AiMode mode)
     {
+        _teardownDone = false;
+        enabled = true;
+        EnsureRuntimeRoots();
+
         _state = state;
         _rules = rules;
         aiMode = mode;
@@ -185,6 +189,21 @@ public class BoardView : MonoBehaviour
         }
 
         DumpStateSnapshot("init");
+    }
+
+    public void RefreshFromState(bool refitCamera = false)
+    {
+        if (_state == null)
+            return;
+
+        _selected = null;
+        _cachedMoves?.Clear();
+        ClearHoverHighlightsIfNeeded();
+        ClearHighlightsPublic();
+        SyncAllPiecesFromState();
+
+        if (refitCamera)
+            CenterAndFitCamera();
     }
 
     void Awake()
@@ -389,8 +408,26 @@ public class BoardView : MonoBehaviour
 
     public void ClearHighlightsPublic()
     {
+        for (int i = 0; i < _highlightPool.Count;)
+        {
+            if (_highlightPool[i])
+            {
+                i++;
+                continue;
+            }
+
+            _highlightPool.RemoveAt(i);
+        }
+
         foreach (var h in _highlights)
-            if (h) { h.SetActive(false); _highlightPool.Add(h); }
+        {
+            if (!h)
+                continue;
+
+            h.SetActive(false);
+            _highlightPool.Add(h);
+        }
+
         _highlights.Clear();
     }
 
@@ -402,17 +439,25 @@ public class BoardView : MonoBehaviour
         {
             GameObject go = null;
 
-            if (_highlightPool.Count > 0)
+            while (_highlightPool.Count > 0 && go == null)
             {
                 var last = _highlightPool.Count - 1;
                 go = _highlightPool[last];
                 _highlightPool.RemoveAt(last);
-                go.SetActive(true);
             }
-            else
+
+            if (go == null)
             {
+                if (HighlightPrefab == null)
+                {
+                    Debug.LogWarning("[BoardView] HighlightPrefab missing; skipping highlight.");
+                    continue;
+                }
+
                 go = Instantiate(HighlightPrefab, HLParent);
             }
+
+            go.SetActive(true);
 
             go.transform.position = BoardToWorld(m.To.X, m.To.Y, -0.1f);
             go.transform.SetParent(HLParent, worldPositionStays: true);
@@ -423,6 +468,9 @@ public class BoardView : MonoBehaviour
     public bool CanHumanMove(PieceView pv)
     {
         if (pv == null || _state == null) return false;
+
+        if (RandomResolutionService.Instance != null && RandomResolutionService.Instance.IsBusy)
+            return false;
 
         bool isPlayersTurn = (pv.Owner == _state.CurrentPlayer);
 
@@ -552,6 +600,7 @@ public class BoardView : MonoBehaviour
             var pv = go.GetComponent<PieceView>();
             if (!pv) pv = go.AddComponent<PieceView>();
             pv.Init(c.X, c.Y, p.Owner, p.TypeName, Color.white);
+            pv.SetInjuredIndicator(p.IsInjured);
 
             // Force correct world position (in case prefab has offsets / changed scale)
             SnapPieceViewToBoard(pv, c.X, c.Y);
@@ -607,6 +656,12 @@ public class BoardView : MonoBehaviour
 
     public void OnTileClicked(int x, int y)
     {
+        if (RandomResolutionService.Instance != null && RandomResolutionService.Instance.IsBusy)
+        {
+            Debug.Log("[CLICK] Ignored: random resolution in progress.");
+            return;
+        }
+
         if (ai != null && _state.CurrentPlayer == "black")
         {
             Debug.Log("[CLICK] Ignored: AI's turn (black).");
@@ -817,6 +872,7 @@ public class BoardView : MonoBehaviour
         _pieceViews.Clear();
         _tiles.Clear();
         _highlights.Clear();
+        _highlightPool.Clear();
         _selected = null;
         _cachedMoves?.Clear();
         _aiRunning = false;

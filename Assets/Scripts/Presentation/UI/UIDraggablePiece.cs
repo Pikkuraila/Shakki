@@ -18,6 +18,7 @@ public sealed class UIDraggablePiece :
 
     public DragPayloadKind payloadKind = DragPayloadKind.Piece;
     public string payloadId; // piece.typeName / powerup.id / item.id
+    public string pieceInstanceId;
 
     public ShopItemDefSO shopDef;
 
@@ -50,6 +51,7 @@ public sealed class UIDraggablePiece :
     Vector2 _frozenSize;
     bool _dragging;
     bool _consumed;
+    float _dragSuppressedUntil;
 
     void Awake()
     {
@@ -93,6 +95,11 @@ public sealed class UIDraggablePiece :
         Debug.Log($"[Drag] BeginDrag for {name}, parentBefore={transform.parent?.name}");
 
         if (_dragging) return;
+        if (Time.unscaledTime < _dragSuppressedUntil)
+        {
+            Debug.Log($"[UIDraggablePiece] Drag suppressed for {name}");
+            return;
+        }
 
         Debug.Log($"[UIDraggablePiece] OnBeginDrag {name}, useDragLayer={useDragLayer}, parent={transform.parent?.name}");
 
@@ -278,6 +285,12 @@ public sealed class UIDraggablePiece :
 
         if (_cg != null) _cg.blocksRaycasts = true;
         if (_img != null) _img.raycastTarget = true;
+    }
+
+    public void SuppressDragForSeconds(float seconds)
+    {
+        _dragSuppressedUntil = Mathf.Max(_dragSuppressedUntil, Time.unscaledTime + Mathf.Max(0f, seconds));
+        ForceStopDrag();
     }
 
     public void MarkConsumed(int newIndex)

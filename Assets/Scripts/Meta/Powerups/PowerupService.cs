@@ -1,9 +1,9 @@
-using Shakki.Core;
+Ôªøusing Shakki.Core;
 using UnityEngine;
 
 public static class PowerupService
 {
-    // Vaihda ruudun oma nappula toiseen, jos s‰‰nnˆt sallivat
+    // Vaihda ruudun oma nappula toiseen, jos s√§√§nn√∂t sallivat
     public static bool TrySwapPiece(GameState s, GameCatalogSO catalog, Coord at, string newPieceId, string owner)
     {
         if (s == null || catalog == null) return false;
@@ -19,10 +19,13 @@ public static class PowerupService
         var def = catalog.GetPieceById(newPieceId);
         if (!def) return false;
 
-        // Vaihto
-        s.Set(at, def.Build(owner));
+        // Vaihto: sailyta sama yksilo ja loukkaantumisstatus
+        var replacement = def.Build(owner, p.InstanceId);
+        replacement.HasMoved = p.HasMoved;
+        replacement.IsInjured = p.IsInjured;
+        s.Set(at, replacement);
 
-        // turva: jos vaihdoit itsesi kuninkaattomaksi (ei pit‰isi tapahtua), ‰l‰ salli
+        // turva: jos vaihdoit itsesi kuninkaattomaksi (ei pitaisi tapahtua), ala salli
         if (!HasKing(s, owner)) { s.Set(at, p); return false; }
 
         return true;

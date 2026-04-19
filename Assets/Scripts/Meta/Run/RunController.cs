@@ -6,6 +6,7 @@ using System.Linq;
 using Shakki.Meta.Bestiary;
 using TMPro;
 
+
 public sealed class RunController : MonoBehaviour
 {
     [Header("Wiring")]
@@ -46,6 +47,8 @@ public sealed class RunController : MonoBehaviour
 
     [SerializeField] private DragController dragController;
     private bool _returningToMacro;
+
+    private readonly Dictionary<string, int> _battleStartWhitePieceCounts = new Dictionary<string, int>();
 
     public enum MacroBuildMode
     {
@@ -98,7 +101,172 @@ public sealed class RunController : MonoBehaviour
     private string _debugEncounterName = "-";
     private string _debugEncounterSource = "-";
 
+    
 
+    public enum PieceDefeatSource
+    {
+        Capture,
+        Spell,
+        Trap,
+        Sacrifice,
+        Scripted,
+    }
+
+    public sealed class PieceDefeatContext
+    {
+        public Piece victim;
+        public Piece attacker;
+        public Coord? victimPos;
+        public Coord? attackerFrom;
+        public PieceDefeatSource source;
+
+        public bool forcePermanent;
+        public bool forceInjury;
+    }
+
+
+    private bool PieceHasLethalTag(Piece piece)
+    {
+        if (piece == null || catalog == null || catalog.pieces == null)
+            return false;
+
+        var def = catalog.pieces.Find(x => x != null && x.typeName == piece.TypeName);
+        if (def == null)
+            return false;
+
+        return def.identityTags.HasTag(Shakki.Core.IdentityTag.Lethal);
+    }
+
+    private void ApplyPersistentDefeat(Piece victim, bool permanentDeath)
+    {
+        if (victim == null || playerService == null)
+            return;
+
+        if (!string.IsNullOrEmpty(victim.InstanceId))
+        {
+            bool changed = permanentDeath
+                ? playerService.RemovePieceInstancePermanently(victim.InstanceId)
+                : playerService.MarkInstanceInjured(victim.InstanceId);
+
+            if (changed)
+                return;
+
+            Debug.LogWarning(
+                $"[Defeat] Instance update failed for {victim.TypeName} instance={victim.InstanceId}, falling back to type-based update.");
+        }
+
+        if (permanentDeath)
+            playerService.RemovePiecePermanently(victim.TypeName, 1);
+        else
+            playerService.MarkPieceInjured(victim.TypeName, 1);
+    }
+
+    private void ResolvePlayerPieceDefeat(PieceDefeatContext ctx)
+    {
+        if (ctx == null || ctx.victim == null) return;
+        if (ctx.victim.Owner != "white") return;
+        if (playerService == null) return;
+
+        bool permanentDeath;
+
+        if (ctx.forcePermanent)
+        {
+            permanentDeath = true;
+        }
+        else if (ctx.forceInjury)
+        {
+            permanentDeath = false;
+        }
+        else if (ctx.victim.IsInjured)
+        {
+            permanentDeath = true;
+        }
+        else if (ctx.source == PieceDefeatSource.Sacrifice)
+        {
+            permanentDeath = true;
+        }
+        else if (ctx.attacker != null && PieceHasLethalTag(ctx.attacker))
+        {
+            permanentDeath = true;
+        }
+        else
+        {
+            permanentDeath = false;
+        }
+
+        ApplyPersistentDefeat(ctx.victim, permanentDeath);
+
+        Debug.Log(
+            $"[Defeat] source={ctx.source} victim={ctx.victim.TypeName} " +
+            $"instance={ctx.victim.InstanceId ?? "-"} injured={ctx.victim.IsInjured} permanent={permanentDeath} " +
+            $"attacker={(ctx.attacker != null ? ctx.attacker.TypeName : "-")}"
+        );
+    }
+
+    private void HandlePieceCaptured(Coord victimPos, Piece victim, Coord attackerFrom, Piece attacker)
+    {
+        ResolvePlayerPieceDefeat(new PieceDefeatContext
+        {
+            victim = victim,
+            attacker = attacker,
+            victimPos = victimPos,
+            attackerFrom = attackerFrom,
+            source = PieceDefeatSource.Capture,
+            forcePermanent = false,
+            forceInjury = false
+        });
+    }
+
+    public void DefeatPlayerPieceBySpell(Piece victim, Piece attacker = null, Coord? victimPos = null)
+    {
+        ResolvePlayerPieceDefeat(new PieceDefeatContext
+        {
+            victim = victim,
+            attacker = attacker,
+            victimPos = victimPos,
+            attackerFrom = null,
+            source = PieceDefeatSource.Spell,
+            forcePermanent = false,
+            forceInjury = false
+        });
+    }
+
+    public void DefeatPlayerPieceByTrap(Piece victim, Piece attacker = null, Coord? victimPos = null)
+    {
+        ResolvePlayerPieceDefeat(new PieceDefeatContext
+        {
+            victim = victim,
+            attacker = attacker,
+            victimPos = victimPos,
+            attackerFrom = null,
+            source = PieceDefeatSource.Trap,
+            forcePermanent = false,
+            forceInjury = false
+        });
+    }
+
+    public void SacrificePlayerPiece(Piece victim, Coord? victimPos = null)
+    {
+        ResolvePlayerPieceDefeat(new PieceDefeatContext
+        {
+            victim = victim,
+            attacker = null,
+            victimPos = victimPos,
+            attackerFrom = null,
+            source = PieceDefeatSource.Sacrifice,
+            forcePermanent = true,
+            forceInjury = false
+        });
+    }
+
+    public void DefeatPlayerPieceScripted(Piece victim, bool permanent, Coord? victimPos = null)
+    {
+        if (victim == null || victim.Owner != "white" || playerService == null) return;
+
+        ApplyPersistentDefeat(victim, permanent);
+
+        Debug.Log($"[Defeat] Scripted victim={victim.TypeName} instance={victim.InstanceId ?? "-"} permanent={permanent}");
+    }
 
     // ===== Dialogue wrappers =====
 
@@ -243,7 +411,7 @@ public sealed class RunController : MonoBehaviour
 
         if (macroMap != null && macroView != null)
         {
-            StartRun();
+            StartOrResumeRun();
         }
         else
         {
@@ -256,11 +424,35 @@ public sealed class RunController : MonoBehaviour
         if (_state != null) _state.OnGameEnded -= OnGameEnded;
     }
 
+
+
     // ---------- RUN + MACRO ----------
+
+    private void StartOrResumeRun()
+    {
+        BuildRules();
+
+        var ps = PlayerService.Instance;
+        var pd = ps != null ? ps.Data : null;
+
+        if (RunStatePersistence.TryBuildSavedMacroMap(pd, macroBuildMode, macroPreset, macroGenerator, out var resumedMap))
+        {
+            macroMap = resumedMap;
+            Debug.Log($"[Run] Resuming existing run seed={pd.lastRunSeed ?? "-"} macroIndex={pd.macroIndex}");
+            EnterMacroPhase();
+            return;
+        }
+
+        StartRun();
+    }
 
     private void StartRun()
     {
         BuildRules();
+        var ps = PlayerService.Instance;
+        var pd = ps != null ? ps.Data : null;
+
+        int? generatedSeed = null;
 
         // 1) Valitse map lähde
         if (macroBuildMode == MacroBuildMode.UsePreset)
@@ -272,7 +464,7 @@ public sealed class RunController : MonoBehaviour
             }
             else
             {
-                macroMap = CloneMacroMap(macroPreset);
+                macroMap = RunStatePersistence.CloneMacroMap(macroPreset);
                 Debug.Log($"[Run] Using macro PRESET '{macroPreset.name}' rows={macroMap.rows} cols={macroMap.columns} tiles={macroMap.tiles?.Length}");
             }
         }
@@ -282,6 +474,7 @@ public sealed class RunController : MonoBehaviour
             if (macroGenerator != null)
             {
                 int seed = seedOverride ?? UnityEngine.Random.Range(int.MinValue, int.MaxValue);
+                generatedSeed = seed;
                 macroMap = macroGenerator.Generate(seed);
                 Debug.Log($"[Run] Generated macroMap seed={seed} rows={macroMap.rows} cols={macroMap.columns} tiles={macroMap.tiles?.Length}");
             }
@@ -292,43 +485,16 @@ public sealed class RunController : MonoBehaviour
         }
 
         // 2) start index kuten ennen
-        var ps = PlayerService.Instance;
         if (ps != null)
         {
-            var pd = ps.Data;
-
-            int startIndex = 0;
-            if (macroMap != null)
-            {
-                int startRow = 0;
-                int startCol = macroMap.columns / 2;
-                startIndex = macroMap.GetIndex(startRow, startCol);
-            }
+            int startIndex = RunStatePersistence.GetRunStartIndex(macroMap);
 
             pd.macroIndex = startIndex;
+            pd.lastRunSeed = RunStatePersistence.FormatStoredRunSeed(macroBuildMode, generatedSeed);
             ps.Save();
         }
 
         EnterMacroPhase();
-    }
-
-    private static MacroMapSO CloneMacroMap(MacroMapSO src)
-    {
-        var m = ScriptableObject.CreateInstance<MacroMapSO>();
-        m.rows = Mathf.Max(1, src.rows);
-        m.columns = Mathf.Max(1, src.columns);
-
-        int n = m.rows * m.columns;
-        m.tiles = new MacroTileDef[n];
-
-        if (src.tiles != null)
-        {
-            int copy = Mathf.Min(src.tiles.Length, n);
-            for (int i = 0; i < copy; i++)
-                m.tiles[i] = src.tiles[i];
-        }
-
-        return m;
     }
 
 
@@ -477,6 +643,9 @@ public sealed class RunController : MonoBehaviour
         macroView.SetVisible(true);
         macroView.Init(macroMap, pd.macroIndex);
         macroView.OnAdvance = HandleMacroAdvance;
+
+        if (macroView.macroPiece != null)
+            macroView.macroPiece.SuppressDragForSeconds(0.15f);
 
         Debug.Log($"[RunController] MacroView activeAfter={macroView.gameObject.activeSelf}");
 
@@ -769,33 +938,81 @@ public sealed class RunController : MonoBehaviour
 
     private void EnsureSlotsOnce(int count)
     {
-        var pd = PlayerService.Instance.Data;
-        if (pd == null) return;
+        var ps = PlayerService.Instance;
+        var pd = ps != null ? ps.Data : null;
+        if (ps == null || pd == null) return;
 
-        bool needsRebuild = (pd.loadoutSlots == null || pd.loadoutSlots.Count != count);
+        var authoritative = ps.HasAuthoritativeInstanceModel(count);
+        var desiredSlots = new List<string>();
+        bool rebuilt = false;
 
-        // Jos mitta täsmää mutta kaikki ovat tyhjiä JA loadoutissa on sisältöä → rakenna uudelleen
-        if (!needsRebuild && pd.loadout != null && pd.loadout.Count > 0)
+        if (authoritative)
         {
-            bool allEmpty = true;
-            for (int i = 0; i < pd.loadoutSlots.Count; i++)
+            desiredSlots = ps.GetLoadoutSlotPieceIds(count).ToList();
+
+            if (!SlotListsMatch(pd.loadoutSlots, desiredSlots))
             {
-                if (!string.IsNullOrEmpty(pd.loadoutSlots[i])) { allEmpty = false; break; }
+                ps.PersistCurrentLoadoutState();
+                desiredSlots = ps.GetLoadoutSlotPieceIds(count).ToList();
+                rebuilt = true;
             }
-            if (allEmpty) needsRebuild = true;
         }
-
-        if (needsRebuild)
+        else
         {
-            // ❗️Oletus on tyhjä merkkijono, EI "King"
-            pd.loadoutSlots = LoadoutModel.Expand(pd.loadout ?? new List<LoadoutEntry>(), count, "");
-            PlayerService.Instance.Save();
-            Debug.Log("[RunController] Rebuilt loadoutSlots from loadout entries.");
+            bool needsRebuild = pd.loadoutSlots == null || pd.loadoutSlots.Count != count;
+
+            if (!needsRebuild && pd.loadout != null && pd.loadout.Count > 0)
+            {
+                bool allEmpty = true;
+                for (int i = 0; i < pd.loadoutSlots.Count; i++)
+                {
+                    if (!string.IsNullOrEmpty(pd.loadoutSlots[i]))
+                    {
+                        allEmpty = false;
+                        break;
+                    }
+                }
+
+                if (allEmpty)
+                    needsRebuild = true;
+            }
+
+            desiredSlots = needsRebuild
+                ? LoadoutModel.Expand(pd.loadout ?? new List<LoadoutEntry>(), count, "")
+                : pd.loadoutSlots.Select(x => x ?? string.Empty).ToList();
+
+            if (needsRebuild || !SlotListsMatch(pd.loadoutSlots, desiredSlots))
+            {
+                pd.loadoutSlots = desiredSlots.ToList();
+                ps.PersistCurrentLoadoutState();
+                desiredSlots = ps.GetLoadoutSlotPieceIds(count).ToList();
+                rebuilt = true;
+            }
         }
 
-        // Diagnoosi
+        if (rebuilt)
+            Debug.Log("[RunController] Rebuilt loadout slot mirror from player state.");
+
         string S(string x) => string.IsNullOrEmpty(x) ? "-" : x;
-        Debug.Log($"[RunController] loadoutSlots[{pd.loadoutSlots.Count}] = [{string.Join(",", pd.loadoutSlots.ConvertAll(S))}]");
+        Debug.Log($"[RunController] loadoutSlots[{desiredSlots.Count}] = [{string.Join(",", desiredSlots.Select(S))}]");
+    }
+
+    private static bool SlotListsMatch(IReadOnlyList<string> current, IReadOnlyList<string> desired)
+    {
+        if (current == null || desired == null)
+            return false;
+        if (current.Count != desired.Count)
+            return false;
+
+        for (int i = 0; i < current.Count; i++)
+        {
+            var left = current[i] ?? string.Empty;
+            var right = desired[i] ?? string.Empty;
+            if (!string.Equals(left, right, System.StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
     }
 
     private void TeardownPrevious()
@@ -804,7 +1021,12 @@ public sealed class RunController : MonoBehaviour
         if (_bestiaryHooks != null)
             _bestiaryHooks.Detach();
 
-        if (_state != null) _state.OnGameEnded -= OnGameEnded;
+        if (_state != null)
+        {
+            _state.OnPieceMoved -= HandlePieceMoved;
+            _state.OnPieceCaptured -= HandlePieceCaptured;
+            _state.OnGameEnded -= OnGameEnded;
+        }
 
         if (boardView != null)
         {
@@ -814,10 +1036,235 @@ public sealed class RunController : MonoBehaviour
         }
     }
 
+    private void HandlePieceMoved(Coord from, Coord to, Piece piece)
+    {
+        if (piece == null || playerService == null || _state == null)
+            return;
+
+        if (piece.Owner != "white")
+            return;
+
+        if (!piece.IsInjured)
+            return;
+
+        if (_state.IsGameOver)
+            return;
+
+        RequestInjuredMoveRoll(
+            piece,
+            from,
+            to,
+            onSuccess: () =>
+            {
+                Debug.Log($"[Injury] {piece.TypeName} survived after moving {from} -> {to}");
+            },
+            onFail: () =>
+            {
+                Debug.Log($"[Injury] {piece.TypeName} died after moving {from} -> {to}");
+
+                dragController?.CancelActiveDragImmediately();
+                ApplyPersistentDefeat(piece, permanentDeath: true);
+
+                var current = _state.Get(to);
+                if (current != null &&
+                    current.Owner == piece.Owner &&
+                    ((!string.IsNullOrEmpty(piece.InstanceId) && current.InstanceId == piece.InstanceId) ||
+                     (string.IsNullOrEmpty(piece.InstanceId) && current.TypeName == piece.TypeName)))
+                {
+                    _state.Set(to, null);
+                }
+                else
+                {
+                    Debug.LogWarning(
+                        $"[Injury] Expected injured mover at {to} but found {(current != null ? $"{current.Owner}:{current.TypeName}#{current.InstanceId ?? "-"}" : "null")}");
+                }
+
+                _state.CheckGameEnd();
+
+                if (boardView != null)
+                    boardView.RefreshFromState();
+            }
+        );
+    }
+
+    private void RequestRoll(
+    string label,
+    int sides,
+    int targetValue,
+    int modifier,
+    RollVisualType visualType,
+    System.Action onSuccess,
+    System.Action onFail)
+    {
+        if (RandomResolutionService.Instance == null)
+        {
+            Debug.LogWarning("[Roll] RandomResolutionService missing, resolving as success.");
+            onSuccess?.Invoke();
+            return;
+        }
+
+        RandomResolutionService.Instance.RequestRoll(new RandomRollRequest
+        {
+            sides = sides,
+            targetValue = targetValue,
+            modifier = modifier,
+            higherOrEqualWins = true,
+            visualType = visualType,
+            label = label,
+            onResolved = value =>
+            {
+                Debug.Log($"[Roll] {label} resolved with {value}");
+            },
+            onSuccess = onSuccess,
+            onFail = onFail
+        });
+    }
+
+    private void RequestInjuredMoveRoll(Piece piece, Coord from, Coord to, System.Action onSuccess, System.Action onFail)
+    {
+        RequestRoll(
+            label: $"{piece.TypeName} injured movement",
+            sides: 2,
+            targetValue: 2,
+            modifier: 0,
+            visualType: RollVisualType.Coin,
+            onSuccess: onSuccess,
+            onFail: onFail
+        );
+    }
+
+    private void RequestPoisonRoll(Piece piece, System.Action onSuccess, System.Action onFail)
+    {
+        RequestRoll(
+            label: $"{piece.TypeName} poison check",
+            sides: 6,
+            targetValue: 4,   // 4+
+            modifier: 0,
+            visualType: RollVisualType.Die,
+            onSuccess: onSuccess,
+            onFail: onFail
+        );
+    }
+
+    private void RequestTrapEvadeRoll(Piece piece, System.Action onSuccess, System.Action onFail)
+    {
+        RequestRoll(
+            label: $"{piece.TypeName} trap evade",
+            sides: 6,
+            targetValue: 5,   // 5+
+            modifier: 0,
+            visualType: RollVisualType.Die,
+            onSuccess: onSuccess,
+            onFail: onFail
+        );
+    }
+
+    private void SnapshotBattleStartWhitePieces()
+    {
+        _battleStartWhitePieceCounts.Clear();
+
+        if (_state == null) return;
+
+        foreach (var c in _state.AllCoords())
+        {
+            var p = _state.Get(c);
+            if (p == null || p.Owner != "white") continue;
+
+            if (_battleStartWhitePieceCounts.ContainsKey(p.TypeName))
+                _battleStartWhitePieceCounts[p.TypeName]++;
+            else
+                _battleStartWhitePieceCounts[p.TypeName] = 1;
+        }
+
+        Debug.Log("[Injury] Battle start white pieces = " +
+                  string.Join(", ", _battleStartWhitePieceCounts.Select(kv => $"{kv.Key}:{kv.Value}")));
+    }
+
+    private void ApplyBattleInjuries()
+    {
+        if (_state == null || playerService == null) return;
+        if (_battleStartWhitePieceCounts.Count == 0) return;
+
+        var remaining = new Dictionary<string, int>();
+
+        foreach (var c in _state.AllCoords())
+        {
+            var p = _state.Get(c);
+            if (p == null || p.Owner != "white") continue;
+
+            if (remaining.ContainsKey(p.TypeName))
+                remaining[p.TypeName]++;
+            else
+                remaining[p.TypeName] = 1;
+        }
+
+        foreach (var kv in _battleStartWhitePieceCounts)
+        {
+            int startCount = kv.Value;
+            int remainCount = remaining.TryGetValue(kv.Key, out var r) ? r : 0;
+            int lostCount = Mathf.Max(0, startCount - remainCount);
+
+            if (lostCount > 0)
+                playerService.MarkPieceInjured(kv.Key, lostCount);
+        }
+
+        Debug.Log("[Injury] Battle end white pieces = " +
+                  string.Join(", ", remaining.Select(kv => $"{kv.Key}:{kv.Value}")));
+
+        _battleStartWhitePieceCounts.Clear();
+    }
+
+    private void ApplyRuntimeInjuriesToWhitePieces()
+    {
+        if (_state == null || playerService == null || playerService.Data == null)
+            return;
+
+        var budget = new Dictionary<string, int>();
+
+        if (playerService.Data.injuredPieces != null)
+        {
+            foreach (var s in playerService.Data.injuredPieces)
+            {
+                if (s == null || string.IsNullOrEmpty(s.pieceId) || s.count <= 0)
+                    continue;
+
+                budget[s.pieceId] = s.count;
+            }
+        }
+
+        foreach (var c in _state.AllCoords())
+        {
+            var p = _state.Get(c);
+            if (p == null || p.Owner != "white")
+                continue;
+
+            p.IsInjured = false;
+
+            if (!string.IsNullOrEmpty(p.InstanceId))
+            {
+                if (playerService.HasPersistentStatus(p.InstanceId, PlayerInstanceSync.WoundedStatusId))
+                {
+                    p.IsInjured = true;
+                    Debug.Log($"[Injury] Applied runtime injury to {p.TypeName}#{p.InstanceId} at {c}");
+                }
+                continue;
+            }
+
+            if (budget.TryGetValue(p.TypeName, out var count) && count > 0)
+            {
+                p.IsInjured = true;
+                budget[p.TypeName] = count - 1;
+                Debug.Log($"[Injury] Applied runtime injury to {p.TypeName} at {c}");
+            }
+        }
+    }
+
     // ---------- PELI → MACRO ----------
 
     private void OnGameEnded(GameEndInfo info)
     {
+        
+
         bool playerWon = info.WinnerColor == "white";
 
         if (playerWon)
@@ -872,8 +1319,8 @@ public sealed class RunController : MonoBehaviour
         EnsureSlotsOnce(Slots);
 
         // 2) Diagnoosi mitä sloteissa on
-        var pd = PlayerService.Instance.Data;
-        Debug.Log($"[ShopOpen] slots={pd.loadoutSlots?.Count ?? 0} sample=[{string.Join(",", (pd.loadoutSlots ?? new System.Collections.Generic.List<string>()).GetRange(0, System.Math.Min(8, pd.loadoutSlots?.Count ?? 0)))}]");
+        var slotPreview = PlayerService.Instance.GetLoadoutSlotPieceIds(Slots).ToList();
+        Debug.Log($"[ShopOpen] slots={slotPreview.Count} sample=[{string.Join(",", slotPreview.Take(8).Select(x => string.IsNullOrEmpty(x) ? "-" : x))}]");
 
         // 3) Loadout-grid pystyyn
         if (loadoutView != null)
@@ -924,24 +1371,15 @@ public sealed class RunController : MonoBehaviour
         var ps = PlayerService.Instance;
         if (ps != null)
         {
-            // 1) Kompaktoi sloteista meta-listaksi ja tallenna
-            ps.Data.loadout = LoadoutModel.Compact(ps.Data.loadoutSlots);
-            ps.Save();
+            ps.PersistCurrentLoadoutState();
         }
 
         // 2) Sulje shop
         if (shopPanel != null) shopPanel.SetActive(false);
+        dragController?.CancelActiveDragImmediately();
+        UIDraggablePiece.s_IsDraggingAny = false;
 
-        // 3) Takaisin makrofaseen jos makrot käytössä, muuten suoraan uuteen matsiin
-        if (macroMap != null && macroView != null)
-        {
-            EnterMacroPhase();
-        }
-        else
-        {
-            StartNewEncounter();
-        }
-        RefreshDebugOverlay();
+        StartCoroutine(CoResumeAfterOverlayClosed());
     }
 
 
@@ -1028,19 +1466,26 @@ public sealed class RunController : MonoBehaviour
         var ps = PlayerService.Instance;
         if (ps != null)
         {
-            // Kompaktoi ja tallenna
-            ps.Data.loadout = LoadoutModel.Compact(ps.Data.loadoutSlots);
-            ps.Save();
+            ps.PersistCurrentLoadoutState();
         }
 
         // Sulje UI
         if (alchemistPanel != null) alchemistPanel.SetActive(false);
+        dragController?.CancelActiveDragImmediately();
+        UIDraggablePiece.s_IsDraggingAny = false;
 
-        // Takaisin makroon / fallback encounteriin
+        StartCoroutine(CoResumeAfterOverlayClosed());
+    }
+
+    private IEnumerator CoResumeAfterOverlayClosed()
+    {
+        yield return null;
+
         if (macroMap != null && macroView != null)
             EnterMacroPhase();
         else
             StartNewEncounter();
+
         RefreshDebugOverlay();
     }
 
@@ -1078,6 +1523,7 @@ public sealed class RunController : MonoBehaviour
         }
     }
 
+ 
 
     private static void ForceBlackKingToBackRank(EncounterSO enc, int boardWidth, int boardHeight)
     {
@@ -1324,6 +1770,8 @@ public sealed class RunController : MonoBehaviour
 
         // Fallbackfill: vain mustat pawnit, ja vain jos encounterissa pyydetty.
         // (ÄLÄ enää pakota aina true täällä.)
+
+        RehydrateRuntimeEncounterDefs(enc);
         // Jos haluat yleisdefaultin budget-battleille: aseta se EnemySpecissä/Assemblerissa.
         // enc.fillBlackPawnsAtY ja enc.blackPawnsY jätetään Encounter/Assemblerin vastuulle.
 
@@ -1331,6 +1779,9 @@ public sealed class RunController : MonoBehaviour
 
         // 3) Sijoittele nappulat
         EncounterLoader.Apply(_state, enc, catalog);
+        ApplyRuntimeInjuriesToWhitePieces();
+
+
 
         // ✅ DROP-FIX: päätä “king required” vasta spawnin jälkeen.
         // Sääntö: jos kuningas on laudalla -> sen kaappaus päättää.
@@ -1398,8 +1849,11 @@ public sealed class RunController : MonoBehaviour
         }
 
         // 5) Game over -kuuntelu
+        _state.OnPieceMoved += HandlePieceMoved;
+        _state.OnPieceCaptured += HandlePieceCaptured;
         _state.OnGameEnded += OnGameEnded;
         RefreshDebugOverlay();
+
     }
 
 
@@ -1496,9 +1950,11 @@ public sealed class RunController : MonoBehaviour
         var tuning = GetBattleTuningForTier(_pendingBattleDifficulty);
 
         string loadoutSummary = "-";
-        if (pd != null && pd.loadoutSlots != null && pd.loadoutSlots.Count > 0)
+        if (ps != null)
         {
-            loadoutSummary = string.Join(",", pd.loadoutSlots.ConvertAll(x => string.IsNullOrEmpty(x) ? "-" : x));
+            var slots = ps.GetLoadoutSlotPieceIds(Slots);
+            if (slots.Count > 0)
+                loadoutSummary = string.Join(",", slots.Select(x => string.IsNullOrEmpty(x) ? "-" : x));
         }
 
         string enemySpecSummary = "-";
@@ -1575,15 +2031,10 @@ public sealed class RunController : MonoBehaviour
 
             // 2) Rakenna slotit tyhjillä paikoilla (16 slottia, tyhjä = "")
             ps.Data.loadoutSlots = LoadoutModel.Expand(ps.Data.loadout, 16, "");
+            PlayerInstanceSync.SyncInstancesFromLegacy(ps.Data, 16);
 
             // --- Resetoi macroIndex kuten ennen ---
-            int startIndex = 0;
-            if (macroMap != null)
-            {
-                int startRow = 0;
-                int startCol = macroMap.columns / 2;
-                startIndex = macroMap.GetIndex(startRow, startCol);
-            }
+            int startIndex = RunStatePersistence.GetRunStartIndex(macroMap);
 
             // --- RESET BESTIARY (for testing) --- TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST TEST
             if (_bestiaryHooks != null) _bestiaryHooks.Detach();
@@ -1594,7 +2045,7 @@ public sealed class RunController : MonoBehaviour
             }
 
             ps.Data.macroIndex = startIndex;
-            ps.Save();
+            ps.PersistCurrentLoadoutState();
         }
 
         if (shopPanel != null)
@@ -1621,7 +2072,7 @@ public sealed class RunController : MonoBehaviour
 
     public void RegisterRuntimePieceRules(PieceDefSO runtimeDef)
     {
-        if (_rules is IRuntimeRulesRegistry reg)
+        if (_rules is Shakki.Core.IRuntimeRulesRegistry reg)
         {
             reg.RegisterOrReplace(runtimeDef);
             Debug.Log($"[RunController] Runtime rules registered for {runtimeDef.typeName}");
@@ -1629,6 +2080,30 @@ public sealed class RunController : MonoBehaviour
         else
         {
             Debug.LogWarning($"[RunController] _rules doesn't support runtime registry ({_rules?.GetType().FullName}).");
+        }
+    }
+
+    private void RehydrateRuntimeEncounterDefs(EncounterSO encounter)
+    {
+        if (encounter?.spawns == null || catalog == null)
+            return;
+
+        foreach (var pieceId in encounter.spawns
+                     .Where(sp => !string.IsNullOrEmpty(sp.pieceId))
+                     .Select(sp => sp.pieceId)
+                     .Distinct())
+        {
+            if (!pieceId.StartsWith("Amalgam_", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var runtimeDef = catalog.GetPieceById(pieceId);
+            if (runtimeDef == null)
+            {
+                Debug.LogWarning($"[RunController] Failed to rehydrate runtime encounter def: {pieceId}");
+                continue;
+            }
+
+            RegisterRuntimePieceRules(runtimeDef);
         }
     }
 

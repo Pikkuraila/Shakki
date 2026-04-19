@@ -53,12 +53,131 @@ public static class LoadoutAssembler
         string implicitKingId = "King",
         int totalSlots = 16)
     {
-        List<string> slots =
-            (data.loadoutSlots != null && data.loadoutSlots.Count == totalSlots)
+        if (map == null) throw new InvalidOperationException("SlotMapSO puuttuu.");
+        if (map.whiteSlotCoords == null || map.whiteSlotCoords.Length == 0)
+            throw new InvalidOperationException("SlotMapSO.whiteSlotCoords puuttuu.");
+
+        if (enemy == null) enemy = new EnemySpec { mode = EnemySpec.Mode.Classic };
+
+        var enc = ScriptableObject.CreateInstance<EncounterSO>();
+        if (enc.spawns == null)
+            enc.spawns = new List<EncounterSO.Spawn>();
+
+        enc.spawns.AddRange(BuildWhiteSpawnsFromPlayerData(data, map, totalSlots, implicitKingId));
+        ApplyEnemyPlanDrop(enc, enemy, boardWidth, boardHeight);
+        return enc;
+    }
+
+    private static List<EncounterSO.Spawn> BuildWhiteSpawnsFromPlayerData(
+        PlayerData data,
+        SlotMapSO map,
+        int totalSlots,
+        string implicitKingId)
+    {
+        var spawns = new List<EncounterSO.Spawn>();
+        if (data == null)
+            return spawns;
+
+        bool hasInstanceModel =
+            data.version >= PlayerInstanceSync.CurrentDataVersion &&
+            data.pieceInstances != null &&
+            data.pieceInstances.Count > 0 &&
+            data.loadoutSlotInstances != null &&
+            data.loadoutSlotInstances.Count == totalSlots;
+
+        if (hasInstanceModel)
+        {
+            foreach (var slot in data.loadoutSlotInstances)
+            {
+                if (slot == null || slot.slotIndex < 0 || slot.slotIndex >= totalSlots)
+                    continue;
+
+                var instance = PlayerInstanceSync.FindAliveInstance(data, slot.pieceInstanceId);
+                var pieceId = PlayerInstanceSync.GetLegacyPieceId(instance);
+                if (instance == null || string.IsNullOrEmpty(pieceId))
+                    continue;
+
+                var c = map.GetWhiteCoordForIndex(slot.slotIndex);
+                spawns.Add(new EncounterSO.Spawn
+                {
+                    owner = "white",
+                    pieceId = pieceId,
+                    pieceInstanceId = instance.instanceId,
+                    x = c.x,
+                    y = c.y
+                });
+            }
+
+            return spawns;
+        }
+
+        List<string> slots = BuildWhiteSlotsFromPlayerData(data, totalSlots, implicitKingId);
+        int n = Math.Min(map.whiteSlotCoords.Length, slots?.Count ?? 0);
+        for (int i = 0; i < n; i++)
+        {
+            var pid = slots[i];
+            if (string.IsNullOrEmpty(pid)) continue;
+
+            var c = map.GetWhiteCoordForIndex(i);
+            spawns.Add(new EncounterSO.Spawn
+            {
+                owner = "white",
+                pieceId = pid,
+                x = c.x,
+                y = c.y
+            });
+        }
+
+        return spawns;
+    }
+
+    private static List<string> BuildWhiteSlotsFromPlayerData(PlayerData data, int totalSlots, string implicitKingId)
+    {
+        if (data == null)
+            return LoadoutModel.Expand(new List<LoadoutEntry>(), totalSlots, implicitKingId);
+
+        bool hasInstanceModel =
+            data.version >= PlayerInstanceSync.CurrentDataVersion &&
+            data.pieceInstances != null &&
+            data.pieceInstances.Count > 0 &&
+            data.loadoutSlotInstances != null &&
+            data.loadoutSlotInstances.Count == totalSlots;
+
+        if (hasInstanceModel)
+        {
+            var slots = Enumerable.Repeat(string.Empty, totalSlots).ToList();
+            foreach (var slot in data.loadoutSlotInstances)
+            {
+                if (slot == null || slot.slotIndex < 0 || slot.slotIndex >= totalSlots)
+                    continue;
+
+                var instance = PlayerInstanceSync.FindAliveInstance(data, slot.pieceInstanceId);
+                slots[slot.slotIndex] = instance != null ? PlayerInstanceSync.GetLegacyPieceId(instance) : string.Empty;
+            }
+
+            return slots;
+        }
+
+        PlayerInstanceSync.SyncInstancesFromLegacy(data, totalSlots);
+
+        if (data.loadoutSlotInstances != null && data.loadoutSlotInstances.Count == totalSlots)
+        {
+            var slots = Enumerable.Repeat(string.Empty, totalSlots).ToList();
+            foreach (var slot in data.loadoutSlotInstances)
+            {
+                if (slot == null || slot.slotIndex < 0 || slot.slotIndex >= totalSlots)
+                    continue;
+
+                var instance = PlayerInstanceSync.FindAliveInstance(data, slot.pieceInstanceId);
+                slots[slot.slotIndex] = instance != null ? PlayerInstanceSync.GetLegacyPieceId(instance) : string.Empty;
+            }
+
+            return slots;
+        }
+
+        return (data.loadoutSlots != null && data.loadoutSlots.Count == totalSlots)
             ? data.loadoutSlots
             : LoadoutModel.Expand(data.loadout ?? new List<LoadoutEntry>(), totalSlots, implicitKingId);
-
-        return BuildFromSlotsDrop(slots, map, enemy, boardWidth, boardHeight);
     }
 
     static void ApplyEnemyPlanDrop(EncounterSO enc, EnemySpec e, int w, int h)

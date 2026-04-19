@@ -59,10 +59,10 @@ public class DragController : MonoBehaviour
 
 
     // --- Pelilauta-drag alkaa ---
-    public void BeginDrag(PieceView pv)
+    public bool BeginDrag(PieceView pv)
     {
-        if (pv == null || board == null || Cam == null) return;
-        if (!board.CanHumanMove(pv)) return;
+        if (pv == null || board == null || Cam == null) return false;
+        if (!board.CanHumanMove(pv)) return false;
 
         _dragPV = pv;
         _dragStartWorld = pv.transform.position;
@@ -87,6 +87,7 @@ public class DragController : MonoBehaviour
         _tiltDeg = 0f;
         pv.transform.localScale = _defaultScale * scaleWhileDrag;
         pv.transform.rotation = Quaternion.identity;
+        return true;
     }
 
     void Update()

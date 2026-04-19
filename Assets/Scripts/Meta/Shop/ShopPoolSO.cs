@@ -31,8 +31,8 @@ public class ShopPoolSO : ScriptableObject
             if (isPiece && !includePieces) { Debug.Log($"[ShopPool] skip {it.name}: pieces disabled"); continue; }
             if (isPowerup && !includePowerups) { Debug.Log($"[ShopPool] skip {it.name}: powerups disabled"); continue; }
 
-            // Yhdistä taulukko/lista samaan rajapintaan
-            IList<string> tags = it.tags as IList<string>; // toimii sekä string[] että List<string>
+            // Yhdista taulukko/lista samaan rajapintaan
+            IList<string> tags = it.tags as IList<string>; // toimii seka string[] etta List<string>
 
             // --- includeTags ---
             if (includeTags != null && includeTags.Count > 0)
@@ -75,7 +75,6 @@ public class ShopPoolSO : ScriptableObject
             // --- Pelaajan kopiot / omistuslogiikka ---
             if (pd != null && isPiece && maxCopiesFromPlayer > 0)
             {
-                // Jos sinulla on piece.id, mieluummin käytä sitä
                 string id = it.piece.typeName;
                 int copies = CountPlayerCopies(pd, id);
                 if (copies >= maxCopiesFromPlayer)
@@ -89,11 +88,41 @@ public class ShopPoolSO : ScriptableObject
             yield return it;
         }
     }
-     
-    // Apumetodi: laskee montako kertaa piece-id esiintyy pelaajan loadoutissa
+
+    // Apumetodi: laskee montako kertaa piece-id esiintyy pelaajan aktiivisissa sloteissa
     private int CountPlayerCopies(PlayerData pd, string pieceId)
     {
-        if (pd == null || string.IsNullOrEmpty(pieceId) || pd.loadoutSlots == null) return 0;
+        if (pd == null || string.IsNullOrEmpty(pieceId)) return 0;
+
+        bool hasInstanceModel =
+            pd.version >= PlayerInstanceSync.CurrentDataVersion &&
+            pd.pieceInstances != null &&
+            pd.pieceInstances.Count > 0 &&
+            pd.loadoutSlotInstances != null &&
+            pd.loadoutSlotInstances.Count > 0;
+
+        if (hasInstanceModel)
+        {
+            int countFromInstances = 0;
+            for (int i = 0; i < pd.loadoutSlotInstances.Count; i++)
+            {
+                var slot = pd.loadoutSlotInstances[i];
+                if (slot == null || string.IsNullOrEmpty(slot.pieceInstanceId))
+                    continue;
+
+                var instance = PlayerInstanceSync.FindAliveInstance(pd, slot.pieceInstanceId);
+                if (instance == null)
+                    continue;
+
+                if (PlayerInstanceSync.GetLegacyPieceId(instance) == pieceId)
+                    countFromInstances++;
+            }
+
+            return countFromInstances;
+        }
+
+        if (pd.loadoutSlots == null) return 0;
+
         int count = 0;
         for (int i = 0; i < pd.loadoutSlots.Count; i++)
             if (pd.loadoutSlots[i] == pieceId) count++;

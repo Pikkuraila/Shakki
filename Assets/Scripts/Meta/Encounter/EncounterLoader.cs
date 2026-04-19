@@ -17,7 +17,9 @@ public static class EncounterLoader
         else
         {
             Debug.Log("[EL] spawns-in: " + string.Join(", ",
-                enc.spawns.Select(sp => $"{sp.owner}:{sp.pieceId}@({sp.x},{sp.y})")));
+                enc.spawns.Select(sp =>
+                    $"{sp.owner}:{sp.pieceId}@({sp.x},{sp.y})" +
+                    (string.IsNullOrEmpty(sp.pieceInstanceId) ? "" : $"#{sp.pieceInstanceId}"))));
 
             var firstOwner = enc.spawns[0].owner;
             if (string.IsNullOrEmpty(firstOwner))
@@ -55,7 +57,7 @@ public static class EncounterLoader
                 continue;
             }
 
-            var piece = CreatePieceFromDef(sp.owner, def);
+            var piece = CreatePieceFromDef(sp.owner, def, sp.pieceInstanceId);
             if (piece == null)
             {
                 Debug.LogError($"[EncounterLoader] Could not construct Piece for '{def?.typeName}'");
@@ -72,10 +74,10 @@ public static class EncounterLoader
             s.Set(c, null);
     }
 
-    private static Piece CreatePieceFromDef(string owner, PieceDefSO def)
+    private static Piece CreatePieceFromDef(string owner, PieceDefSO def, string pieceInstanceId = null)
     {
         var rules = TryBuildRules(def) ?? Array.Empty<IMoveRule>();
-        var piece = new Piece(owner, def.typeName, rules)
+        var piece = new Piece(owner, def.typeName, rules, def.GetComputedTags(), pieceInstanceId)
         {
             HasMoved = false
         };

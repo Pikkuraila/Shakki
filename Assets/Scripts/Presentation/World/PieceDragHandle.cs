@@ -45,8 +45,7 @@ public sealed class PieceDragHandle : MonoBehaviour
         var delta = Input.mousePosition - _downScreenPos;
         if (!_dragStarted && delta.sqrMagnitude >= (dragThresholdPixels * dragThresholdPixels))
         {
-            _dragStarted = true;
-            _drag?.BeginDrag(_pv);
+            _dragStarted = _drag != null && _drag.BeginDrag(_pv);
         }
     }
 
