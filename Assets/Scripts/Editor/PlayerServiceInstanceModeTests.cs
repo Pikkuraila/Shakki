@@ -137,6 +137,83 @@ public sealed class PlayerServiceInstanceModeTests
         }
     }
 
+    [Test]
+    public void SetLoadoutSlotPieceIds_PrunesLegacyInjuryMirrorToExplicitSlots()
+    {
+        var data = CreateAuthoritativeData(
+            new PieceInstanceData
+            {
+                instanceId = "piece_000030",
+                pieceDefId = "King",
+                statuses = new List<PersistentPieceStatusData>()
+            },
+            new PieceInstanceData
+            {
+                instanceId = "piece_000031",
+                pieceDefId = "Rook",
+                statuses = new List<PersistentPieceStatusData>
+                {
+                    new PersistentPieceStatusData { statusId = PlayerInstanceSync.WoundedStatusId }
+                }
+            });
+
+        data.loadoutSlotInstances[0].pieceInstanceId = "piece_000030";
+        data.loadoutSlotInstances[1].pieceInstanceId = "piece_000031";
+        PlayerInstanceSync.SyncLegacyFromInstances(data, totalSlots: 2);
+
+        var service = CreatePlayerService(data);
+
+        try
+        {
+            service.SetLoadoutSlotPieceIds(new[] { "King", string.Empty }, totalSlots: 2);
+            int slotCount = service.Data.loadoutSlotInstances.Count;
+
+            Assert.That(service.GetLoadoutPieceIdAtSlot(0, slotCount), Is.EqualTo("King"));
+            Assert.That(service.GetLoadoutPieceIdAtSlot(1, slotCount), Is.EqualTo(string.Empty));
+            Assert.That(service.GetInjuredCount("Rook"), Is.EqualTo(0));
+            Assert.That(service.GetHealthyLoadout().Single(x => x.pieceId == "King").count, Is.EqualTo(1));
+            Assert.That(service.GetHealthyLoadout().Any(x => x.pieceId == "Rook"), Is.False);
+        }
+        finally
+        {
+            Object.DestroyImmediate(service.gameObject);
+        }
+    }
+
+    [Test]
+    public void ResetRun_ClearsLegacyInjuriesForFreshRun()
+    {
+        var data = CreateAuthoritativeData(
+            new PieceInstanceData
+            {
+                instanceId = "piece_000040",
+                pieceDefId = "King",
+                statuses = new List<PersistentPieceStatusData>()
+            });
+
+        data.injuredPieces = new List<InjuredPieceStack>
+        {
+            new InjuredPieceStack { pieceId = "Rook", count = 1 }
+        };
+        data.lastRunSeed = "123";
+        data.coins = 42;
+
+        var service = CreatePlayerService(data);
+
+        try
+        {
+            service.ResetRun();
+
+            Assert.That(service.Data.coins, Is.EqualTo(0));
+            Assert.That(service.Data.lastRunSeed, Is.Null);
+            Assert.That(service.Data.injuredPieces, Is.Empty);
+        }
+        finally
+        {
+            Object.DestroyImmediate(service.gameObject);
+        }
+    }
+
     private static PlayerData CreateAuthoritativeData(params PieceInstanceData[] instances)
     {
         var totalSlots = Mathf.Max(instances.Length, 1);

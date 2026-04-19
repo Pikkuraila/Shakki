@@ -1002,52 +1002,14 @@ public sealed class RunController : MonoBehaviour
         var pd = ps != null ? ps.Data : null;
         if (ps == null || pd == null) return;
 
-        var authoritative = ps.HasAuthoritativeInstanceModel(count);
-        var desiredSlots = new List<string>();
+        var desiredSlots = ps.GetLoadoutSlotPieceIds(count).ToList();
         bool rebuilt = false;
 
-        if (authoritative)
+        if (!SlotListsMatch(pd.loadoutSlots, desiredSlots))
         {
+            ps.SetLoadoutSlotPieceIds(desiredSlots, count);
             desiredSlots = ps.GetLoadoutSlotPieceIds(count).ToList();
-
-            if (!SlotListsMatch(pd.loadoutSlots, desiredSlots))
-            {
-                ps.PersistCurrentLoadoutState();
-                desiredSlots = ps.GetLoadoutSlotPieceIds(count).ToList();
-                rebuilt = true;
-            }
-        }
-        else
-        {
-            bool needsRebuild = pd.loadoutSlots == null || pd.loadoutSlots.Count != count;
-
-            if (!needsRebuild && pd.loadout != null && pd.loadout.Count > 0)
-            {
-                bool allEmpty = true;
-                for (int i = 0; i < pd.loadoutSlots.Count; i++)
-                {
-                    if (!string.IsNullOrEmpty(pd.loadoutSlots[i]))
-                    {
-                        allEmpty = false;
-                        break;
-                    }
-                }
-
-                if (allEmpty)
-                    needsRebuild = true;
-            }
-
-            desiredSlots = needsRebuild
-                ? LoadoutModel.Expand(pd.loadout ?? new List<LoadoutEntry>(), count, "")
-                : pd.loadoutSlots.Select(x => x ?? string.Empty).ToList();
-
-            if (needsRebuild || !SlotListsMatch(pd.loadoutSlots, desiredSlots))
-            {
-                pd.loadoutSlots = desiredSlots.ToList();
-                ps.PersistCurrentLoadoutState();
-                desiredSlots = ps.GetLoadoutSlotPieceIds(count).ToList();
-                rebuilt = true;
-            }
+            rebuilt = true;
         }
 
         if (rebuilt)
@@ -2021,19 +1983,22 @@ public sealed class RunController : MonoBehaviour
         if (ps != null)
         {
             ps.ResetRun();
+            ps.Data.loadout = new List<LoadoutEntry>();
+            ps.Data.loadoutSlots = null;
+            ps.Data.pieceInstances = new List<PieceInstanceData>();
+            ps.Data.loadoutSlotInstances = new List<LoadoutSlotInstanceData>();
+            ps.Data.nextPieceInstanceNumber = 1;
 
-            // --- RESETOI LOADOUT ---
-            // 1) Perus-loadout (vaihda tähän sun haluama startti)
-            ps.Data.loadout = new List<LoadoutEntry>
-            {
-            new LoadoutEntry { pieceId = "King", count = 1 },
-            new LoadoutEntry { pieceId = "Pawn", count = 2 },
-            new LoadoutEntry { pieceId = "Rook", count = 1 },
-            };
-
-            // 2) Rakenna slotit tyhjillä paikoilla (16 slottia, tyhjä = "")
-            ps.Data.loadoutSlots = LoadoutModel.Expand(ps.Data.loadout, 16, "");
-            PlayerInstanceSync.SyncInstancesFromLegacy(ps.Data, 16);
+            var startSlots = LoadoutModel.Expand(
+                new List<LoadoutEntry>
+                {
+                    new LoadoutEntry { pieceId = "King", count = 1 },
+                    new LoadoutEntry { pieceId = "Pawn", count = 2 },
+                    new LoadoutEntry { pieceId = "Rook", count = 1 },
+                },
+                Slots,
+                "");
+            ps.SetLoadoutSlotPieceIds(startSlots, Slots);
 
             // --- Resetoi macroIndex kuten ennen ---
             int startIndex = RunStatePersistence.GetRunStartIndex(macroMap);

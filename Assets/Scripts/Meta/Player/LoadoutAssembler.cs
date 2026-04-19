@@ -78,12 +78,7 @@ public static class LoadoutAssembler
         if (data == null)
             return spawns;
 
-        bool hasInstanceModel =
-            data.version >= PlayerInstanceSync.CurrentDataVersion &&
-            data.pieceInstances != null &&
-            data.pieceInstances.Count > 0 &&
-            data.loadoutSlotInstances != null &&
-            data.loadoutSlotInstances.Count == totalSlots;
+        bool hasInstanceModel = HasAuthoritativeInstanceModel(data, totalSlots);
 
         if (hasInstanceModel)
         {
@@ -136,12 +131,7 @@ public static class LoadoutAssembler
         if (data == null)
             return LoadoutModel.Expand(new List<LoadoutEntry>(), totalSlots, implicitKingId);
 
-        bool hasInstanceModel =
-            data.version >= PlayerInstanceSync.CurrentDataVersion &&
-            data.pieceInstances != null &&
-            data.pieceInstances.Count > 0 &&
-            data.loadoutSlotInstances != null &&
-            data.loadoutSlotInstances.Count == totalSlots;
+        bool hasInstanceModel = HasAuthoritativeInstanceModel(data, totalSlots);
 
         if (hasInstanceModel)
         {
@@ -158,26 +148,19 @@ public static class LoadoutAssembler
             return slots;
         }
 
-        PlayerInstanceSync.SyncInstancesFromLegacy(data, totalSlots);
-
-        if (data.loadoutSlotInstances != null && data.loadoutSlotInstances.Count == totalSlots)
-        {
-            var slots = Enumerable.Repeat(string.Empty, totalSlots).ToList();
-            foreach (var slot in data.loadoutSlotInstances)
-            {
-                if (slot == null || slot.slotIndex < 0 || slot.slotIndex >= totalSlots)
-                    continue;
-
-                var instance = PlayerInstanceSync.FindAliveInstance(data, slot.pieceInstanceId);
-                slots[slot.slotIndex] = instance != null ? PlayerInstanceSync.GetLegacyPieceId(instance) : string.Empty;
-            }
-
-            return slots;
-        }
-
         return (data.loadoutSlots != null && data.loadoutSlots.Count == totalSlots)
-            ? data.loadoutSlots
+            ? data.loadoutSlots.Select(x => x ?? string.Empty).ToList()
             : LoadoutModel.Expand(data.loadout ?? new List<LoadoutEntry>(), totalSlots, implicitKingId);
+    }
+
+    private static bool HasAuthoritativeInstanceModel(PlayerData data, int totalSlots)
+    {
+        return data != null &&
+               data.version >= PlayerInstanceSync.CurrentDataVersion &&
+               data.pieceInstances != null &&
+               data.pieceInstances.Count > 0 &&
+               data.loadoutSlotInstances != null &&
+               data.loadoutSlotInstances.Count == totalSlots;
     }
 
     static void ApplyEnemyPlanDrop(EncounterSO enc, EnemySpec e, int w, int h)

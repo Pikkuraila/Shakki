@@ -322,17 +322,18 @@ public sealed class PlayerService : MonoBehaviour
             totalSlots = Data.loadoutSlotInstances?.Count ?? Data.loadoutSlots?.Count ?? PlayerInstanceSync.DefaultLoadoutSlotCount;
 
         var normalizedSlots = NormalizeSlotPieceIds(slotPieceIds, totalSlots);
+        Data.loadoutSlots = normalizedSlots;
+        Data.loadout = BuildLoadoutEntriesFromSlotPieceIds(normalizedSlots);
+        ClampLegacyInjuriesToExplicitLoadout(Data);
 
         if (HasAuthoritativeInstanceModel(totalSlots))
         {
             PlayerInstanceSync.EnsureInitialized(Data, totalSlots);
-            Data.loadoutSlots = normalizedSlots;
             PlayerInstanceSync.SyncInstancesFromLegacy(Data, totalSlots);
             SaveFromInstanceModel();
         }
         else
         {
-            Data.loadoutSlots = normalizedSlots;
             SaveFromLegacyData();
         }
 
@@ -920,6 +921,9 @@ public sealed class PlayerService : MonoBehaviour
         if (Data.slotPowerups != null)
             Data.slotPowerups.Clear();
 
+        if (Data.injuredPieces != null)
+            Data.injuredPieces.Clear();
+
         Data.lastRunSeed = null;
 
         OnChanged?.Invoke();
@@ -1020,5 +1024,53 @@ public sealed class PlayerService : MonoBehaviour
             normalized.Add(string.Empty);
 
         return normalized;
+    }
+
+    private static List<LoadoutEntry> BuildLoadoutEntriesFromSlotPieceIds(IEnumerable<string> slotPieceIds)
+    {
+        return (slotPieceIds ?? Enumerable.Empty<string>())
+            .Where(x => !string.IsNullOrEmpty(x))
+            .GroupBy(x => x, StringComparer.Ordinal)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => new LoadoutEntry
+            {
+                pieceId = g.Key,
+                count = g.Count()
+            })
+            .ToList();
+    }
+
+    private static void ClampLegacyInjuriesToExplicitLoadout(PlayerData data)
+    {
+        if (data == null)
+            return;
+
+        data.injuredPieces ??= new List<InjuredPieceStack>();
+
+        var totals = (data.loadout ?? new List<LoadoutEntry>())
+            .Where(x => x != null && !string.IsNullOrEmpty(x.pieceId) && x.count > 0)
+            .ToDictionary(x => x.pieceId, x => Mathf.Max(0, x.count), StringComparer.Ordinal);
+
+        var clamped = new List<InjuredPieceStack>();
+        foreach (var injured in data.injuredPieces)
+        {
+            if (injured == null || string.IsNullOrEmpty(injured.pieceId))
+                continue;
+
+            if (!totals.TryGetValue(injured.pieceId, out var total) || total <= 0)
+                continue;
+
+            int count = Mathf.Clamp(injured.count, 0, total);
+            if (count <= 0)
+                continue;
+
+            clamped.Add(new InjuredPieceStack
+            {
+                pieceId = injured.pieceId,
+                count = count
+            });
+        }
+
+        data.injuredPieces = clamped;
     }
 }
