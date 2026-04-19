@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using Shakki.Core;
@@ -490,6 +491,78 @@ public sealed class Phase0BaselineTests
         Assert.That(endInfo.Value.Reason, Is.EqualTo(EndReason.Annihilation));
     }
 
+    [Test]
+    public void RunController_ShouldFallbackToLegacyDefeat_AllowsLegacyOnlyMode()
+    {
+        Assert.That(InvokeRunControllerBoolPolicy("ShouldFallbackToLegacyDefeat", false, false), Is.True);
+        Assert.That(InvokeRunControllerBoolPolicy("ShouldFallbackToLegacyDefeat", false, true), Is.False);
+    }
+
+    [Test]
+    public void RunController_ShouldFallbackToLegacyDefeat_BlocksFallbackForAuthoritativeInstanceModel()
+    {
+        Assert.That(InvokeRunControllerBoolPolicy("ShouldFallbackToLegacyDefeat", true, false), Is.False);
+        Assert.That(InvokeRunControllerBoolPolicy("ShouldFallbackToLegacyDefeat", true, true), Is.False);
+    }
+
+    [Test]
+    public void RunController_ShouldSkipLegacyDefeatFallbackForMissingInstanceId_WhenAuthoritativeInstanceModelActive()
+    {
+        Assert.That(
+            InvokeRunControllerBoolPolicy(
+                "ShouldSkipLegacyDefeatFallbackForMissingInstanceId",
+                true,
+                string.Empty),
+            Is.True);
+
+        Assert.That(
+            InvokeRunControllerBoolPolicy(
+                "ShouldSkipLegacyDefeatFallbackForMissingInstanceId",
+                false,
+                string.Empty),
+            Is.False);
+
+        Assert.That(
+            InvokeRunControllerBoolPolicy(
+                "ShouldSkipLegacyDefeatFallbackForMissingInstanceId",
+                true,
+                "piece_000123"),
+            Is.False);
+    }
+
+    [Test]
+    public void RunController_BuildLegacyRuntimeInjuryBudget_ReturnsEmptyWhenAuthoritativeInstanceModelActive()
+    {
+        var injured = new List<InjuredPieceStack>
+        {
+            new InjuredPieceStack { pieceId = "Rook", count = 2 },
+            new InjuredPieceStack { pieceId = "Pawn", count = 1 }
+        };
+
+        var budget = InvokeRunControllerInjuryBudgetBuilder(true, injured);
+
+        Assert.That(budget, Is.Empty);
+    }
+
+    [Test]
+    public void RunController_BuildLegacyRuntimeInjuryBudget_UsesLegacyInjuriesOnlyInLegacyMode()
+    {
+        var injured = new List<InjuredPieceStack>
+        {
+            new InjuredPieceStack { pieceId = "Rook", count = 2 },
+            new InjuredPieceStack { pieceId = "Pawn", count = 1 },
+            new InjuredPieceStack { pieceId = string.Empty, count = 4 },
+            new InjuredPieceStack { pieceId = "King", count = 0 },
+            null
+        };
+
+        var budget = InvokeRunControllerInjuryBudgetBuilder(false, injured);
+
+        Assert.That(budget.Count, Is.EqualTo(2));
+        Assert.That(budget["Rook"], Is.EqualTo(2));
+        Assert.That(budget["Pawn"], Is.EqualTo(1));
+    }
+
     private sealed class FixedTargetRule : IMoveRule
     {
         private readonly Coord _target;
@@ -519,6 +592,25 @@ public sealed class Phase0BaselineTests
             Assert.That(actual.tiles[i].shopTierOffset, Is.EqualTo(expected.tiles[i].shopTierOffset), $"Shop tier offset mismatch at index {i}");
             Assert.That(actual.tiles[i].param, Is.EqualTo(expected.tiles[i].param), $"Param mismatch at index {i}");
         }
+    }
+
+    private static bool InvokeRunControllerBoolPolicy(string methodName, params object[] args)
+    {
+        var method = typeof(RunController).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.That(method, Is.Not.Null, $"Missing RunController policy method: {methodName}");
+        return (bool)method.Invoke(null, args);
+    }
+
+    private static Dictionary<string, int> InvokeRunControllerInjuryBudgetBuilder(
+        bool hasAuthoritativeInstanceModel,
+        IEnumerable<InjuredPieceStack> injured)
+    {
+        var method = typeof(RunController).GetMethod(
+            "BuildLegacyRuntimeInjuryBudget",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.That(method, Is.Not.Null, "Missing RunController injury budget builder.");
+
+        return (Dictionary<string, int>)method.Invoke(null, new object[] { hasAuthoritativeInstanceModel, injured });
     }
 
     private sealed class TestRuleSO : MoveRuleSO

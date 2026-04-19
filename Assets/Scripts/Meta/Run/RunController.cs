@@ -48,8 +48,6 @@ public sealed class RunController : MonoBehaviour
     [SerializeField] private DragController dragController;
     private bool _returningToMacro;
 
-    private readonly Dictionary<string, int> _battleStartWhitePieceCounts = new Dictionary<string, int>();
-
     public enum MacroBuildMode
     {
         UsePreset,
@@ -137,23 +135,85 @@ public sealed class RunController : MonoBehaviour
         return def.identityTags.HasTag(Shakki.Core.IdentityTag.Lethal);
     }
 
+    private bool HasAuthoritativeRuntimePieceState()
+    {
+        if (playerService == null || playerService.Data == null)
+            return false;
+
+        int totalSlots = playerService.Data.loadoutSlotInstances?.Count ?? Slots;
+        if (totalSlots <= 0)
+            totalSlots = Slots;
+
+        return playerService.HasAuthoritativeInstanceModel(totalSlots);
+    }
+
+    private static bool ShouldFallbackToLegacyDefeat(bool hasAuthoritativeInstanceModel, bool instanceUpdateSucceeded)
+    {
+        return !hasAuthoritativeInstanceModel && !instanceUpdateSucceeded;
+    }
+
+    private static bool ShouldSkipLegacyDefeatFallbackForMissingInstanceId(
+        bool hasAuthoritativeInstanceModel,
+        string victimInstanceId)
+    {
+        return hasAuthoritativeInstanceModel && string.IsNullOrEmpty(victimInstanceId);
+    }
+
+    private static Dictionary<string, int> BuildLegacyRuntimeInjuryBudget(
+        bool hasAuthoritativeInstanceModel,
+        IEnumerable<InjuredPieceStack> injuredPieces)
+    {
+        var budget = new Dictionary<string, int>();
+        if (hasAuthoritativeInstanceModel || injuredPieces == null)
+            return budget;
+
+        foreach (var stack in injuredPieces)
+        {
+            if (stack == null || string.IsNullOrEmpty(stack.pieceId) || stack.count <= 0)
+                continue;
+
+            budget[stack.pieceId] = stack.count;
+        }
+
+        return budget;
+    }
+
     private void ApplyPersistentDefeat(Piece victim, bool permanentDeath)
     {
         if (victim == null || playerService == null)
             return;
 
+        bool hasAuthoritativeInstanceModel = HasAuthoritativeRuntimePieceState();
+        bool instanceUpdateSucceeded = false;
+
         if (!string.IsNullOrEmpty(victim.InstanceId))
         {
-            bool changed = permanentDeath
+            instanceUpdateSucceeded = permanentDeath
                 ? playerService.RemovePieceInstancePermanently(victim.InstanceId)
                 : playerService.MarkInstanceInjured(victim.InstanceId);
 
-            if (changed)
+            if (instanceUpdateSucceeded)
                 return;
+
+            if (hasAuthoritativeInstanceModel)
+            {
+                Debug.LogWarning(
+                    $"[Defeat] Instance update failed for {victim.TypeName} instance={victim.InstanceId} while authoritative instance model is active; skipping type-based fallback.");
+                return;
+            }
 
             Debug.LogWarning(
                 $"[Defeat] Instance update failed for {victim.TypeName} instance={victim.InstanceId}, falling back to type-based update.");
         }
+        else if (ShouldSkipLegacyDefeatFallbackForMissingInstanceId(hasAuthoritativeInstanceModel, victim.InstanceId))
+        {
+            Debug.LogWarning(
+                $"[Defeat] Missing instance id for {victim.TypeName} while authoritative instance model is active; skipping type-based fallback.");
+            return;
+        }
+
+        if (!ShouldFallbackToLegacyDefeat(hasAuthoritativeInstanceModel, instanceUpdateSucceeded))
+            return;
 
         if (permanentDeath)
             playerService.RemovePiecePermanently(victim.TypeName, 1);
@@ -1159,78 +1219,13 @@ public sealed class RunController : MonoBehaviour
         );
     }
 
-    private void SnapshotBattleStartWhitePieces()
-    {
-        _battleStartWhitePieceCounts.Clear();
-
-        if (_state == null) return;
-
-        foreach (var c in _state.AllCoords())
-        {
-            var p = _state.Get(c);
-            if (p == null || p.Owner != "white") continue;
-
-            if (_battleStartWhitePieceCounts.ContainsKey(p.TypeName))
-                _battleStartWhitePieceCounts[p.TypeName]++;
-            else
-                _battleStartWhitePieceCounts[p.TypeName] = 1;
-        }
-
-        Debug.Log("[Injury] Battle start white pieces = " +
-                  string.Join(", ", _battleStartWhitePieceCounts.Select(kv => $"{kv.Key}:{kv.Value}")));
-    }
-
-    private void ApplyBattleInjuries()
-    {
-        if (_state == null || playerService == null) return;
-        if (_battleStartWhitePieceCounts.Count == 0) return;
-
-        var remaining = new Dictionary<string, int>();
-
-        foreach (var c in _state.AllCoords())
-        {
-            var p = _state.Get(c);
-            if (p == null || p.Owner != "white") continue;
-
-            if (remaining.ContainsKey(p.TypeName))
-                remaining[p.TypeName]++;
-            else
-                remaining[p.TypeName] = 1;
-        }
-
-        foreach (var kv in _battleStartWhitePieceCounts)
-        {
-            int startCount = kv.Value;
-            int remainCount = remaining.TryGetValue(kv.Key, out var r) ? r : 0;
-            int lostCount = Mathf.Max(0, startCount - remainCount);
-
-            if (lostCount > 0)
-                playerService.MarkPieceInjured(kv.Key, lostCount);
-        }
-
-        Debug.Log("[Injury] Battle end white pieces = " +
-                  string.Join(", ", remaining.Select(kv => $"{kv.Key}:{kv.Value}")));
-
-        _battleStartWhitePieceCounts.Clear();
-    }
-
     private void ApplyRuntimeInjuriesToWhitePieces()
     {
         if (_state == null || playerService == null || playerService.Data == null)
             return;
 
-        var budget = new Dictionary<string, int>();
-
-        if (playerService.Data.injuredPieces != null)
-        {
-            foreach (var s in playerService.Data.injuredPieces)
-            {
-                if (s == null || string.IsNullOrEmpty(s.pieceId) || s.count <= 0)
-                    continue;
-
-                budget[s.pieceId] = s.count;
-            }
-        }
+        bool hasAuthoritativeInstanceModel = HasAuthoritativeRuntimePieceState();
+        var budget = BuildLegacyRuntimeInjuryBudget(hasAuthoritativeInstanceModel, playerService.Data.injuredPieces);
 
         foreach (var c in _state.AllCoords())
         {
@@ -1247,6 +1242,13 @@ public sealed class RunController : MonoBehaviour
                     p.IsInjured = true;
                     Debug.Log($"[Injury] Applied runtime injury to {p.TypeName}#{p.InstanceId} at {c}");
                 }
+                continue;
+            }
+
+            if (hasAuthoritativeInstanceModel)
+            {
+                Debug.LogWarning(
+                    $"[Injury] Missing instance id for {p.TypeName} at {c} while authoritative instance model is active; skipping legacy injury fallback.");
                 continue;
             }
 
